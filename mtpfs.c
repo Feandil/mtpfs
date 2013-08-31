@@ -304,17 +304,35 @@ static int
 find_storage(const gchar * path)
 {
     int i;
-    DBG("find_storage:%s",path);
-    for (i=0;i<4;i++) {
+    gsize storage_len;
+    gchar * second_slash;
+    //DBG("find_storage:%s", path);
+
+    // Skip initial '/'
+    if (*path != '/') {
+       DBG("find_storage: internal error: unexpected root");
+       return -1;
+    }
+    ++path;
+
+    // find storage len
+    second_slash = strstr(path, "/");
+    if (second_slash == NULL) {
+        storage_len = strlen(path);
+    } else {
+        storage_len = second_slash - path;
+    }
+
+    for (i=0; i<4; i++) {
         if (storageArea[i].storage != NULL) {
-            int maxlen = strlen(storageArea[i].storage->StorageDescription);
-            if (strlen(path+1) < maxlen) maxlen = strlen(path+1);
-            if (strncmp(storageArea[i].storage->StorageDescription,path+1,maxlen)==0) {
-                DBG("%s found as %d",storageArea[i].storage->StorageDescription,i);
+            if ((storage_len == strlen(storageArea[i].storage->StorageDescription)) &&
+                (strncmp(storageArea[i].storage->StorageDescription, path, storage_len) == 0)) {
+                DBG("find_storage:%s found as %d", storageArea[i].storage->StorageDescription, i);
                 return i;
             }
         }
     }
+    DBG("find_storage: %s not found", path - 1);
     return -1;
 }
 
