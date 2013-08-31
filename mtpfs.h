@@ -41,7 +41,7 @@ typedef struct
 
 /* local functions */
 static LIBMTP_filetype_t find_filetype (const gchar * filename);
-static int lookup_folder_id (LIBMTP_folder_t * folderlist, gchar * path, gchar * parent);
+static int lookup_folder_id (LIBMTP_folder_t * folderlist, const gchar * path);
 static int parse_path (const gchar * path);
 static void check_lost_files ();
 void check_folders ();

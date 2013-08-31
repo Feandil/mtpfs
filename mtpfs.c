@@ -319,43 +319,60 @@ find_storage(const gchar * path)
 }
 
 static int
-lookup_folder_id (LIBMTP_folder_t * folderlist, gchar * path, gchar * parent)
+lookup_folder_id (LIBMTP_folder_t * folder, const gchar * path)
 {
-    DBG("lookup_folder_id %s,%s",path, parent);
-    int ret = -1;
-    if (folderlist == NULL) {
+    gchar ** fields;
+    gsize pos;
+    int ret;
+    //DBG("lookup_folder_id %s", path);
+
+    if (folder == NULL) {
+        DBG("lookup_folder_id: Empty list");
         return -1;
     }
-    gchar * mypath;
-    mypath=path;
+    if (path[0] != '/') {
+        DBG("lookup_folder_id: Internal error: unexpected root")
+        return -1;
+    }
+
     check_folders();
-    if (parent==NULL) {
-        if (g_strrstr(path+1,"/") == NULL) {
-            DBG("Storage dir");
-            return -2;
+
+    fields = g_strsplit(path + 1, "/", -1);
+
+    if (fields[1] == NULL) {
+        DBG("lookup_folder_id: Storage dir");
+        return -2;
+    }
+
+    //DBG("lookup_folder_id: Strip storage area name");
+    pos = 1;
+
+    while (fields[pos] != NULL && folder != NULL) {
+        if (*fields[pos] == '\0') {
+            //DBG("lookup_folder_id: Skipping empty part in path");
+            ++pos;
+            continue;
+        }
+        //DBG("lookup_folder_id: Compare %s(%i) and %s", fields[pos], pos, folder->name);
+        if (g_ascii_strncasecmp(fields[pos], folder->name, strlen(folder->name)) == 0) {
+            //DBG("lookup_folder_id: match, going deeper");
+            ret = folder->folder_id;
+            ++pos;
+            folder = folder->child;
         } else {
-            DBG("Strip storage area name"); 
-            mypath=strstr(path+1,"/");
-            parent="";
+            //DBG("lookup_folder_id: no match, try sibling");
+            folder = folder->sibling;
         }
     }
 
-    gchar *current;
-    current = g_strconcat(parent, "/", folderlist->name,NULL);
-    LIBMTP_devicestorage_t *storage;
+    g_strfreev(fields);
 
-    DBG("compare %s,%s",mypath, current);
-    if (g_ascii_strcasecmp (mypath, current) == 0) {
-        ret = folderlist->folder_id;
-    } else if (g_ascii_strncasecmp (mypath, current, strlen (current)) == 0) {
-        ret = lookup_folder_id (folderlist->child, mypath, current);
+    if (fields[pos] == NULL) {
+        DBG("lookup_folder_id %s: found %i", path, ret);
+        return ret;
     }
-
-    if (ret == -1) {
-		ret = lookup_folder_id (folderlist->sibling, mypath, parent);
-	}
-    g_free(current);
-    return ret;
+    DBG("lookup_folder_id %s: not found", path);
+    return -1;
 }
 
 static int
@@ -430,7 +447,7 @@ parse_path (const gchar * path)
                 folder = storageArea[storageid].folders;
                 int folder_id = 0;
                 if (strcmp (directory, "") != 0) {
-                    folder_id = lookup_folder_id (folder, directory, NULL);
+                    folder_id = lookup_folder_id (folder, directory);
                 }
                 DBG("parent id:%d:%s", folder_id, directory);
                 LIBMTP_file_t *file;
@@ -452,7 +469,7 @@ parse_path (const gchar * path)
             if (item_id < 0) {
                 directory = strcat (directory, "/");
                 directory = strcat (directory, fields[i]);
-                item_id = lookup_folder_id (folder, directory, NULL);
+                item_id = lookup_folder_id (folder, directory);
                 res = item_id;
 				break;
             } else {
@@ -497,7 +514,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
                 if (strlen (fields[i]) > 0) {
                     if (fields[i + 1] == NULL) {
                         gchar *tmp = g_strndup (directory, strlen (directory) - 1);
-                        parent_id = lookup_folder_id (storageArea[storageid].folders, tmp, NULL);
+                        parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
 						g_free (tmp);
                         if (parent_id < 0)
                             parent_id = 0;
@@ -717,7 +734,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     int folder_id = 0;
     if (strcmp (path, "/") != 0) {
         check_folders();
-        folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path, NULL);
+        folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
     }
 
     DBG("Checking folders for %d",storageid);
@@ -870,7 +887,7 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 
     int item_id = -1;
     check_folders();
-    item_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path, NULL);
+    item_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
     if (item_id >= 0) {
         // Must be a folder
         stbuf->st_ino = item_id;
@@ -1097,7 +1114,7 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
                 if (fields[i + 1] == NULL) {
                     gchar *tmp = g_strndup (directory, strlen (directory) - 1);
                     check_folders();
-                    parent_id = lookup_folder_id (storageArea[storageid].folders, tmp, NULL);
+                    parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
 					g_free (tmp);
                     if (parent_id < 0)
                         parent_id = 0;
@@ -1146,7 +1163,7 @@ mtpfs_rmdir (const char *path)
         return_unlock(0);
     }
     int storageid=find_storage(path);
-    folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path, NULL);
+    folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
     if (folder_id < 0)
         return_unlock(-ENOENT);
     
@@ -1175,7 +1192,7 @@ mtpfs_rename (const char *oldname, const char *newname)
         if (strlen (fields[i]) > 0) {
             if (fields[i + 1] == NULL) {
                 directory = g_strndup (directory, strlen (directory) - 1);
-                parent_id = lookup_folder_id (folders, directory, NULL);
+                parent_id = lookup_folder_id (folders, directory);
                 if (parent_id < 0)
                     parent_id = 0;
                 filename = g_strdup (fields[i]);
@@ -1210,7 +1227,7 @@ mtpfs_rename (const char *oldname, const char *newname)
     int storageid_old=find_storage(oldname);
     int storageid_new=find_storage(newname);
     if (strcmp (oldname, "/") != 0) {
-        folder_id = lookup_folder_id (storageArea[storageid_old].folders, (gchar *) oldname, NULL);
+        folder_id = lookup_folder_id (storageArea[storageid_old].folders, (gchar *) oldname);
     }
     if (folder_id < 0)
         return_unlock(-ENOENT);
