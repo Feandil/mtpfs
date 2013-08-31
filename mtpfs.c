@@ -29,7 +29,7 @@ static void dump_mtp_error()
 #define enter_lock(a...)       do { DBG("lock"); DBG(a); g_static_mutex_lock(&device_lock); } while(0)
 #define return_unlock(a)       do { DBG("return unlock"); g_static_mutex_unlock(&device_lock); return a; } while(0)
 
-void
+static void
 free_files(LIBMTP_file_t *filelist)
 {
     LIBMTP_file_t *file = filelist, *tmp;
@@ -40,7 +40,7 @@ free_files(LIBMTP_file_t *filelist)
     }
 }
 
-void
+static void
 free_playlists(LIBMTP_playlist_t *pl)
 {
     LIBMTP_playlist_t *playlist = pl, *tmp;
@@ -51,7 +51,7 @@ free_playlists(LIBMTP_playlist_t *pl)
     }
 }
 
-void
+static void
 check_files ()
 {
     if (files_changed) {
@@ -126,7 +126,7 @@ check_folders ()
     }
 }
 
-void
+static void
 check_playlists ()
 {
     if (playlists_changed) {
@@ -139,7 +139,7 @@ check_playlists ()
     }
 }
 
-int
+static int
 save_playlist (const char *path, struct fuse_file_info *fi)
 {
     DBG("save_playlist");
@@ -752,7 +752,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     int folder_id = 0;
     if (strcmp (path, "/") != 0) {
         check_folders();
-        folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
+        folder_id = lookup_folder_id (storageArea[storageid].folders, path);
     }
 
     DBG("Checking folders for %d",storageid);
@@ -904,7 +904,7 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 
     int item_id = -1;
     check_folders();
-    item_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
+    item_id = lookup_folder_id (storageArea[storageid].folders, path);
     if (item_id >= 0) {
         // Must be a folder
         stbuf->st_ino = item_id;
@@ -1180,7 +1180,7 @@ mtpfs_rmdir (const char *path)
         return_unlock(0);
     }
     int storageid=find_storage(path);
-    folder_id = lookup_folder_id (storageArea[storageid].folders, (gchar *) path);
+    folder_id = lookup_folder_id (storageArea[storageid].folders, path);
     if (folder_id < 0)
         return_unlock(-ENOENT);
     
@@ -1244,7 +1244,7 @@ mtpfs_rename (const char *oldname, const char *newname)
     int storageid_old=find_storage(oldname);
     int storageid_new=find_storage(newname);
     if (strcmp (oldname, "/") != 0) {
-        folder_id = lookup_folder_id (storageArea[storageid_old].folders, (gchar *) oldname);
+        folder_id = lookup_folder_id (storageArea[storageid_old].folders, oldname);
     }
     if (folder_id < 0)
         return_unlock(-ENOENT);
@@ -1315,7 +1315,7 @@ mtpfs_statfs (const char *path, struct statfs *stbuf)
     return 0;
 }
 
-void *
+static void *
 mtpfs_init ()
 {
     LIBMTP_devicestorage_t *storage;
@@ -1326,7 +1326,7 @@ mtpfs_init ()
     return 0;
 }
 
-int
+static int
 mtpfs_blank()
 {
     // Do nothing
@@ -1577,7 +1577,7 @@ int parse_xing(struct xing *xing, struct mad_bitptr ptr, unsigned int bitlen)
 }
 
 
-int scan(void const *ptr, ssize_t len)
+static int scan(void const *ptr, ssize_t len)
 {
     int duration = 0;
     struct mad_stream stream;
