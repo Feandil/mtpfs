@@ -765,7 +765,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
         if (folder == NULL) return_unlock(0);
         folder = folder->child;
     }
-    if (folder == NULL) return_unlock(0);
 
     while (folder != NULL) {
         if ((folder->parent_id == folder_id) ||
