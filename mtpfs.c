@@ -401,9 +401,7 @@ parse_path (const gchar * path)
     int item_id = -1;
     int i;
     // Check cached files first
-    GSList *item;
-    item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
-    if (item != NULL)
+    if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL)
         return 0;
 
     // Check Playlists
@@ -822,10 +820,8 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
     }
 
     // Check cached files first (stuff that hasn't been written to dev yet)
-    GSList *item;
     if (myfiles != NULL) {
-        item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
-        if (item != NULL) {
+        if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL) {
             stbuf->st_mode = S_IFREG | 0777;
             stbuf->st_size = 0;
             stbuf->st_blocks = 2;
