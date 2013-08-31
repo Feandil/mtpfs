@@ -30,6 +30,8 @@
 #include "id3read.h"
 #endif
 
+#define MAX_STORAGE_AREA 4
+
 typedef struct
 {
     LIBMTP_devicestorage_t *storage;
@@ -66,7 +68,7 @@ static int mtpfs_statfs (const char *path, struct statfs *stbuf);
 int calc_length(int f);
 
 static LIBMTP_mtpdevice_t *device;
-static StorageArea storageArea[4];
+static StorageArea storageArea[MAX_STORAGE_AREA];
 static LIBMTP_file_t *files = NULL;
 static gboolean files_changed = TRUE;
 static GSList *lostfiles = NULL;

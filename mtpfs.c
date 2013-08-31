@@ -1451,11 +1451,11 @@ main (int argc, char *argv[])
 
     /* Check if multiple storage areas */
     LIBMTP_devicestorage_t *storage;
-    i=0;
-    for (storage = device->storage; storage != 0; storage = storage->next)  {
-        storageArea[i].storage=storage;
-        storageArea[i].folders=NULL;
-        storageArea[i].folders_changed=TRUE;
+    i = 0;
+    for (storage = device->storage; storage != 0 && i < MAX_STORAGE_AREA; storage = storage->next)  {
+        storageArea[i].storage = storage;
+        storageArea[i].folders = NULL;
+        storageArea[i].folders_changed = TRUE;
         DBG("Storage%d: %d - %s\n",i, storage->id, storage->StorageDescription);
         i++;
     }
