@@ -1459,40 +1459,6 @@ main (int argc, char *argv[])
 }
 
 #ifdef USEMAD
-/* Private buffer for passing around with libmad */
-typedef struct
-{
-    /* The buffer of raw mpeg data for libmad to decode */
-    void * buf;
-
-    /* Cached data: pointers to the dividing points of frames
-       in buf, and the playing time at each of those frames */
-    void **frames;
-    mad_timer_t *times;
-
-    /* fd is the file descriptor if over the network, or -1 if
-       using mmap()ed files */
-    int fd;
-
-    /* length of the current stream, corrected for id3 tags */
-    ssize_t length;
-
-    /* have we finished fetching this file? (only in non-mmap()'ed case */
-    int done;
-
-    /* total number of frames */
-    unsigned long num_frames;
-
-    /* number of frames to play */
-    unsigned long max_frames;
-
-    /* total duration of the file */
-    mad_timer_t duration;
-
-    /* filename as mpg321 has opened it */
-    char filename[PATH_MAX];
-} buffer;
-
 /* XING parsing is from the MAD winamp input plugin */
 
 struct xing {
