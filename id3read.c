@@ -28,48 +28,6 @@ Boston, MA 02111-1307, USA.
 #include <glib/gstdio.h>
 
 
-/* Converts a figure representing a number of seconds to
- *  * a string in mm:ss notation */
-gchar *seconds_to_mmss(uint32_t seconds)
-{
-    gchar tmp2[10];
-    gchar tmp[10];
-    uint32_t secfrac = seconds % 60;
-    uint32_t minfrac = seconds / 60;
-
-    if (seconds == 0)
-        return g_strdup("0:00");
-
-    snprintf(tmp2, 10, "0%u", secfrac);
-    while (strlen(tmp2)>2) {
-        tmp2[0]=tmp2[1];
-        tmp2[1]=tmp2[2];
-        tmp2[2]='\0';
-    }
-    snprintf(tmp, 10, "%u:%s", minfrac, tmp2);
-    return g_strdup(tmp);
-}
-
-/* Converts a string in mm:ss notation to a figure
- *  * representing seconds */
-guint mmss_to_seconds(gchar *mmss)
-{
-    gchar **tmp;
-    guint seconds = 0;
-
-    if (!mmss)
-        return seconds;
-
-    tmp = g_strsplit(mmss, ":", 0);
-    if (tmp[1] != NULL) {
-        seconds = 60 * strtoul(tmp[0],NULL,10);
-        seconds += strtoul(tmp[1],NULL,10);
-    }
-    if (tmp != NULL)
-        g_strfreev(tmp);
-    return seconds;
-}
-
 /* Eventually make charset selectable */
 
 static id3_utf8_t *
