@@ -21,12 +21,14 @@ Boston, MA 02111-1307, USA.
 #include <libmtp.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 
+#include <id3read.h>
 
 /* Eventually make charset selectable */
 
