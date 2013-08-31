@@ -693,7 +693,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
             st.st_nlink = 2;
             st.st_ino = storage->id;
             st.st_mode = S_IFREG | 0555;
-            gchar *name;
             filler (buf, storage->StorageDescription, &st, 0);
         }
 		return_unlock(0);
@@ -743,7 +742,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     }
 
     // Get storage area
-    int i;
     int storageid = -1;
     storageid=find_storage(path);
     // Get folder listing.
@@ -781,7 +779,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     LIBMTP_destroy_folder_t (folder);
     DBG("Checking files");
     // Find files
-    LIBMTP_file_t *file, *tmp;
+    LIBMTP_file_t *file;
     check_files();
     file = files;
     while (file != NULL) {
@@ -794,7 +792,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
             if (filler (buf, (file->filename == NULL ? "<mtpfs null>" : file->filename), &st, 0))
                 break;
         }
-        tmp = file;
         file = file->next;
     }
     DBG("readdir exit");
@@ -1226,12 +1223,12 @@ mtpfs_rename (const char *oldname, const char *newname)
 */
 
 /* Allow renaming of empty folders only */
-int
+static int
 mtpfs_rename (const char *oldname, const char *newname)
 {
  	enter_lock("rename '%s' to '%s'", oldname, newname);
 
-    int folder_id = -1, parent_id;
+    int folder_id = -1;
     int folder_empty = 1;
     int ret = -ENOTEMPTY;
     LIBMTP_folder_t *folder;
@@ -1252,7 +1249,6 @@ mtpfs_rename (const char *oldname, const char *newname)
     if (folder == NULL)
 		return_unlock(-ENOENT);
 
-    parent_id = folder->parent_id;
     folder = folder->child;
 
     /* Check if empty folder */
@@ -1314,7 +1310,6 @@ mtpfs_statfs (const char *path, struct statfs *stbuf)
 static void *
 mtpfs_init ()
 {
-    LIBMTP_devicestorage_t *storage;
     DBG("mtpfs_init");
     files_changed=TRUE;
     playlists_changed=TRUE;
