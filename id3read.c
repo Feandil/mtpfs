@@ -38,7 +38,7 @@ charset_to_utf8 (const id3_latin1_t * str)
     id3_utf8_t *tmp;
 
     tmp =
-        (id3_utf8_t *) g_convert ((gchar *) str, -1, "UTF-8", "ISO-8859-1",
+        (id3_utf8_t *) g_convert ((const gchar *) str, -1, "UTF-8", "ISO-8859-1",
                                   NULL, NULL, NULL);
     return (id3_utf8_t *) tmp;
 }
@@ -54,7 +54,7 @@ charset_to_utf8 (const id3_latin1_t * str)
  */
 
 static gchar *
-getFrameText (struct id3_tag *tag, char *frame_name)
+getFrameText (struct id3_tag *tag, const char *frame_name)
 {
     const id3_ucs4_t *string;
     struct id3_frame *frame;
@@ -201,7 +201,7 @@ getTracknum (struct id3_tag *tag)
     gchar trackno[40];
     gchar *trackstr = getFrameText (tag, "TRCK");
     gchar *posstr = getFrameText (tag, "TPOS");
-    gint i;
+    gsize i;
 
     if (trackstr == NULL) {
         return NULL;
