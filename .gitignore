@@ -1,0 +1,14 @@
+*.o
+*~
+.deps
+Makefile*
+!Makefile.am
+aclocal.m4
+autom4te.cache
+compile
+config*
+!configure.ac
+depcomp
+install-sh
+missing
+mtpfs
