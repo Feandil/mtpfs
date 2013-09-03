@@ -6,8 +6,6 @@
     See the file COPYING.
 */
 
-#include <mtpfs.h>
-
 #if DEBUG
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -15,6 +13,8 @@
 #else
 #define DBG(a...)
 #endif
+
+#include <mtpfs.h>
 
 #if DEBUG
 static void dump_mtp_error()
