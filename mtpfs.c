@@ -10,6 +10,7 @@
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #define DBG(a...) {g_printf( "[" __FILE__ ":" TOSTRING(__LINE__) "] " a );g_printf("\n");}
+#define G_DEBUG_LOCKS
 #else
 #define DBG(a...)
 #endif
@@ -26,8 +27,9 @@ static void dump_mtp_error()
 #define dump_mtp_error()
 #endif
 
-#define enter_lock(a...)       do { DBG("lock"); DBG(a); g_static_mutex_lock(&device_lock); } while(0)
-#define return_unlock(a)       do { DBG("return unlock"); g_static_mutex_unlock(&device_lock); return a; } while(0)
+G_LOCK_DEFINE_STATIC(device_lock);
+#define enter_lock(a...)       do { G_LOCK(device_lock); } while(0)
+#define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
 
 static void
 free_files(LIBMTP_file_t *filelist)
