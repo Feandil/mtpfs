@@ -842,7 +842,7 @@ mtpfs_unlink (const gchar * path)
     if (item_id < 0)
         return_unlock(-ENOENT);
     ret = LIBMTP_Delete_Object (device, item_id);
-    if (ret != 0)
+    if (ret != 0) {
       LIBMTP_Dump_Errorstack (device);
     } else {
         files_changed = TRUE;
