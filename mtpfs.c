@@ -58,11 +58,8 @@ check_files ()
 {
     if (files_changed) {
         DBG("Refreshing Filelist");
-        LIBMTP_file_t *newfiles = NULL;
         if (files) free_files(files);
-        newfiles = LIBMTP_Get_Filelisting_With_Callback(device, NULL, NULL);
-        files = newfiles;
-        newfiles = NULL;
+        files = LIBMTP_Get_Filelisting_With_Callback(device, NULL, NULL);
         files_changed = FALSE;
         //check_lost_files ();
         DBG("Refreshing Filelist exiting");
