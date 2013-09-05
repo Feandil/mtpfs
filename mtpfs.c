@@ -6,31 +6,78 @@
     See the file COPYING.
 */
 
-#if DEBUG
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-#define DBG(a...) {g_printf( "[" __FILE__ ":" TOSTRING(__LINE__) "] " a );g_printf("\n");}
-#define G_DEBUG_LOCKS
-#else
-#define DBG(a...)
-#endif
+/* Headers */
+#include "mtpfs.h"
 
-#include <mtpfs.h>
+#include <assert.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fuse.h>
+#include <fcntl.h>
+#include <getopt.h>
+#include <glib.h>
+#include <glib/gprintf.h>
+#include <libmtp.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/mman.h>
+#include <sys/statfs.h>
+#include <unistd.h>
+
+
+/* Debugging macro */
 
 #if DEBUG
+# define STRINGIFY(x) #x
+# define TOSTRING(x) STRINGIFY(x)
+# define DBG(a...) {g_printf( "[" __FILE__ ":" TOSTRING(__LINE__) "] " a );g_printf("\n");}
+# if DEBUG_FUNC
+#  define DBG_F(a...) DBG(a)
+# else
+#  define DBG_F(a...)
+# endif
 static void dump_mtp_error()
 {
     LIBMTP_Dump_Errorstack(device);
     LIBMTP_Clear_Errorstack(device);
 }
 #else
-#define dump_mtp_error()
+# define DBG(a...)
+# define DBG_F(a...)
+# define dump_mtp_error()
 #endif
+
+/* Private struct */
+
+typedef struct
+{
+    LIBMTP_devicestorage_t *storage;
+    LIBMTP_folder_t *folders;
+    gboolean folders_changed;
+} StorageArea;
+
+/* Static variables */
+
+static LIBMTP_mtpdevice_t *device;
+static StorageArea storageArea[MAX_STORAGE_AREA];
+static LIBMTP_file_t *files = NULL;
+static gboolean files_changed = TRUE;
+static GSList *lostfiles = NULL;
+static GSList *myfiles = NULL;
+static LIBMTP_playlist_t *playlists = NULL;
+static gboolean playlists_changed = FALSE;
 
 G_LOCK_DEFINE_STATIC(device_lock);
 #define enter_lock(a...)       do { G_LOCK(device_lock); } while(0)
 #define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
 
+
+/* Helper */
+static uint32_t parse_path (const gchar * path);
+
+/* Freeing tree representation */
 static void
 free_files(LIBMTP_file_t *filelist)
 {
@@ -53,6 +100,7 @@ free_playlists(LIBMTP_playlist_t *pl)
     }
 }
 
+/* Checking tree representation */
 static void
 check_files ()
 {
