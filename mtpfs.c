@@ -1344,12 +1344,35 @@ mtpfs_rename (const char *oldname, const char *newname)
 static int
 mtpfs_statvfs (const char *path, struct statvfs *stbuf)
 {
-    DBG("mtpfs_statvfs");
+    int storage_id = -1;
+
+    DBG("mtpfs_statvfs(%s)", path);
+
+
     stbuf->f_bsize = 1024;
-    stbuf->f_blocks = device->storage->MaxCapacity / 1024;
-    stbuf->f_bfree = device->storage->FreeSpaceInBytes / 1024;
+
+    if (strncmp("/Playlists", path, 10) == 0) {
+        return -ENOSYS;
+    }
+
+    storage_id = find_storage(path);
+    if (storage_id == -1) {
+        stbuf->f_blocks = 0;
+        stbuf->f_bfree = 0;
+        stbuf->f_ffree = 0;
+        for (storage_id = 0; storage_id < MAX_STORAGE_AREA; ++storage_id) {
+            if (storageArea[storage_id].storage != NULL) {
+                stbuf->f_blocks += storageArea[storage_id].storage->MaxCapacity / 1024;
+                stbuf->f_bfree  += storageArea[storage_id].storage->FreeSpaceInBytes /1024;
+                stbuf->f_ffree  += storageArea[storage_id].storage->FreeSpaceInObjects;
+            }
+        }
+    } else {
+        stbuf->f_blocks = storageArea[storage_id].storage->MaxCapacity / 1024;
+        stbuf->f_bfree  = storageArea[storage_id].storage->FreeSpaceInBytes / 1024;
+        stbuf->f_ffree  = storageArea[storage_id].storage->FreeSpaceInObjects;
+    }
     stbuf->f_bavail = stbuf->f_bfree;
-    stbuf->f_ffree = device->storage->FreeSpaceInObjects / 1024;
     return 0;
 }
 
