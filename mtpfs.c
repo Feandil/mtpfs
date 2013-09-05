@@ -33,12 +33,12 @@
 # define STRINGIFY(x) #x
 # define TOSTRING(x) STRINGIFY(x)
 # define DBG(a...) {g_printf( "[" __FILE__ ":" TOSTRING(__LINE__) "] " a );g_printf("\n");}
-# if DEBUG_FUNC
+# ifdef DEBUG_FUNC
 #  define DBG_F(a...) DBG(a)
 # else
 #  define DBG_F(a...)
 # endif
-static void dump_mtp_error()
+static void dump_mtp_error(LIBMTP_mtpdevice_t *device)
 {
     LIBMTP_Dump_Errorstack(device);
     LIBMTP_Clear_Errorstack(device);
@@ -46,7 +46,7 @@ static void dump_mtp_error()
 #else
 # define DBG(a...)
 # define DBG_F(a...)
-# define dump_mtp_error()
+# define dump_mtp_error(a)
 #endif
 
 /* Private struct */
@@ -1210,7 +1210,7 @@ main (int argc, char *argv[])
         } else {
             fprintf(stdout,"LIBMTP_Get_Storage() failed:%d\n", ret);
         }
-        dump_mtp_error();
+        dump_mtp_error(device);
         return 1;
     }
 
