@@ -74,9 +74,6 @@ G_LOCK_DEFINE_STATIC(device_lock);
 #define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
 
 
-/* Helper */
-static uint32_t parse_path (const gchar * path);
-
 /* Freeing tree representation */
 static void
 free_files(LIBMTP_file_t *filelist)
@@ -186,166 +183,7 @@ check_playlists ()
     }
 }
 
-static int
-save_playlist (const char *path, struct fuse_file_info *fi)
-{
-    DBG("save_playlist");
-    int ret=0;
-
-    LIBMTP_playlist_t *playlist;
-    FILE *file = NULL;
-    char item_path[1024];
-    uint32_t item_id=0;
-    uint32_t *tracks;
-    gchar **fields;
-    GSList *tmplist=NULL;
-
-    fields = g_strsplit(path,"/",-1);
-    gchar *playlist_name;
-    playlist_name = g_strndup(fields[2],strlen(fields[2])-4);
-    DBG("Adding:%s",playlist_name);
-    g_strfreev(fields);
-
-    playlist=LIBMTP_new_playlist_t();
-    playlist->name=g_strdup(playlist_name);
-
-    file = fdopen(fi->fh,"r");
-    while (fgets(item_path,sizeof(item_path)-1,file) != NULL){
-        g_strchomp(item_path);
-        item_id = parse_path(item_path);
-        if (item_id != -1) {
-            tmplist = g_slist_append(tmplist,GUINT_TO_POINTER(item_id));
-            DBG("Adding to tmplist:%d",item_id);
-        }
-    }
-    playlist->no_tracks = g_slist_length(tmplist);
-    tracks = g_malloc(playlist->no_tracks * sizeof(uint32_t));
-    int i;
-    for (i = 0; i < playlist->no_tracks; i++) {
-            tracks[i]=(uint32_t)GPOINTER_TO_UINT(g_slist_nth_data(tmplist,i));
-            DBG("Adding:%d-%d",i,tracks[i]);
-    }
-    playlist->tracks = tracks;
-    DBG("Total:%d",playlist->no_tracks);
-
-    int playlist_id = 0;
-    LIBMTP_playlist_t *tmp_playlist;
-    check_playlists();
-    tmp_playlist=playlists;
-    while (tmp_playlist != NULL){
-        if (g_ascii_strcasecmp(tmp_playlist->name,playlist_name) == 0){
-            playlist_id=playlist->playlist_id;
-        }
-        tmp_playlist=tmp_playlist->next;
-    }
-
-    if (playlist_id > 0) {
-        DBG("Update playlist %d",playlist_id);
-        playlist->playlist_id=playlist_id;
-        ret = LIBMTP_Update_Playlist(device,playlist);
-    } else {
-        DBG("New playlist");
-        ret = LIBMTP_Create_New_Playlist(device,playlist);
-    }
-    playlists_changed=TRUE;
-    return ret;
-}
-
-/* Find the file type based on extension */
-static LIBMTP_filetype_t
-find_filetype (const gchar * filename)
-{
-    DBG("find_filetype");
-    gchar **fields;
-    fields = g_strsplit (filename, ".", -1);
-    gchar *ptype;
-    ptype = g_strdup (fields[g_strv_length (fields) - 1]);
-    g_strfreev (fields);
-    LIBMTP_filetype_t filetype;
-
-    // This need to be kept constantly updated as new file types arrive.
-    if (!g_ascii_strncasecmp (ptype, "wav",3)) {
-        filetype = LIBMTP_FILETYPE_WAV;
-    } else if (!g_ascii_strncasecmp (ptype, "mp3",3)) {
-        filetype = LIBMTP_FILETYPE_MP3;
-    } else if (!g_ascii_strncasecmp (ptype, "wma",3)) {
-        filetype = LIBMTP_FILETYPE_WMA;
-    } else if (!g_ascii_strncasecmp (ptype, "ogg",3)) {
-        filetype = LIBMTP_FILETYPE_OGG;
-    } else if (!g_ascii_strncasecmp (ptype, "aa",2)) {
-        filetype = LIBMTP_FILETYPE_AUDIBLE;
-    } else if (!g_ascii_strncasecmp (ptype, "mp4",3)) {
-        filetype = LIBMTP_FILETYPE_MP4;
-    } else if (!g_ascii_strncasecmp (ptype, "wmv",3)) {
-        filetype = LIBMTP_FILETYPE_WMV;
-    } else if (!g_ascii_strncasecmp (ptype, "avi",3)) {
-        filetype = LIBMTP_FILETYPE_AVI;
-    } else if (!g_ascii_strncasecmp (ptype, "mpeg",4) || !g_ascii_strncasecmp (ptype, "mpg",3)) {
-        filetype = LIBMTP_FILETYPE_MPEG;
-    } else if (!g_ascii_strncasecmp (ptype, "asf",3)) {
-        filetype = LIBMTP_FILETYPE_ASF;
-    } else if (!g_ascii_strncasecmp (ptype, "qt",2) || !g_ascii_strncasecmp (ptype, "mov",3)) {
-        filetype = LIBMTP_FILETYPE_QT;
-    } else if (!g_ascii_strncasecmp (ptype, "wma",3)) {
-        filetype = LIBMTP_FILETYPE_WMA;
-    } else if (!g_ascii_strncasecmp (ptype, "jpg",3) || !g_ascii_strncasecmp (ptype, "jpeg",4)) {
-        filetype = LIBMTP_FILETYPE_JPEG;
-    } else if (!g_ascii_strncasecmp (ptype, "jfif",4)) {
-        filetype = LIBMTP_FILETYPE_JFIF;
-    } else if (!g_ascii_strncasecmp (ptype, "tif",3) || !g_ascii_strncasecmp (ptype, "tiff",4)) {
-        filetype = LIBMTP_FILETYPE_TIFF;
-    } else if (!g_ascii_strncasecmp (ptype, "bmp",3)) {
-        filetype = LIBMTP_FILETYPE_BMP;
-    } else if (!g_ascii_strncasecmp (ptype, "gif",3)) {
-        filetype = LIBMTP_FILETYPE_GIF;
-    } else if (!g_ascii_strncasecmp (ptype, "pic",3) || !g_ascii_strncasecmp (ptype, "pict",4)) {
-        filetype = LIBMTP_FILETYPE_PICT;
-    } else if (!g_ascii_strncasecmp (ptype, "png",3)) {
-        filetype = LIBMTP_FILETYPE_PNG;
-    } else if (!g_ascii_strncasecmp (ptype, "wmf",3)) {
-        filetype = LIBMTP_FILETYPE_WINDOWSIMAGEFORMAT;
-    } else if (!g_ascii_strncasecmp (ptype, "ics",3)) {
-        filetype = LIBMTP_FILETYPE_VCALENDAR2;
-    } else if (!g_ascii_strncasecmp (ptype, "exe",3) || !g_ascii_strncasecmp (ptype, "com",3) ||
-               !g_ascii_strncasecmp (ptype, "bat",3) || !g_ascii_strncasecmp (ptype, "dll",3) ||
-               !g_ascii_strncasecmp (ptype, "sys",3)) {
-        filetype = LIBMTP_FILETYPE_WINEXEC;
-    } else if (!g_ascii_strncasecmp (ptype, "txt",3)) {
-        filetype = LIBMTP_FILETYPE_TEXT;
-    } else if (!g_ascii_strncasecmp (ptype, "htm",3) || !g_ascii_strncasecmp (ptype, "html",4) ) {
-        filetype = LIBMTP_FILETYPE_HTML;
-    } else if (!g_ascii_strncasecmp (ptype, "bin",3)) {
-        filetype = LIBMTP_FILETYPE_FIRMWARE;
-    } else if (!g_ascii_strncasecmp (ptype, "aac",3)) {
-        filetype = LIBMTP_FILETYPE_AAC;
-    } else if (!g_ascii_strncasecmp (ptype, "flac",4) || !g_ascii_strncasecmp (ptype, "fla",3)) {
-        filetype = LIBMTP_FILETYPE_FLAC;
-    } else if (!g_ascii_strncasecmp (ptype, "mp2",3)) {
-        filetype = LIBMTP_FILETYPE_MP2;
-    } else if (!g_ascii_strncasecmp (ptype, "m4a",3)) {
-        filetype = LIBMTP_FILETYPE_M4A;
-    } else if (!g_ascii_strncasecmp (ptype, "doc",3)) {
-        filetype = LIBMTP_FILETYPE_DOC;
-    } else if (!g_ascii_strncasecmp (ptype, "xml",3)) {
-        filetype = LIBMTP_FILETYPE_XML;
-    } else if (!g_ascii_strncasecmp (ptype, "xls",3)) {
-        filetype = LIBMTP_FILETYPE_XLS;
-    } else if (!g_ascii_strncasecmp (ptype, "ppt",3)) {
-        filetype = LIBMTP_FILETYPE_PPT;
-    } else if (!g_ascii_strncasecmp (ptype, "mht",3)) {
-        filetype = LIBMTP_FILETYPE_MHT;
-    } else if (!g_ascii_strncasecmp (ptype, "jp2",3)) {
-        filetype = LIBMTP_FILETYPE_JP2;
-    } else if (!g_ascii_strncasecmp (ptype, "jpx",3)) {
-        filetype = LIBMTP_FILETYPE_JPX;
-    } else {
-        DBG("Sorry, file type \"%s\" is not yet supported", ptype);
-        DBG("Tagging as unknown file type.");
-        filetype = LIBMTP_FILETYPE_UNKNOWN;
-    }
-    g_free (ptype);
-    return filetype;
-}
+/* Finding elements in representation */
 
 static int
 find_storage(const gchar * path)
@@ -546,6 +384,169 @@ parse_path (const gchar * path)
     g_strfreev (fields);
     DBG("parse_path exiting:%s - %d",path,res);
     return res;
+}
+
+/* Saving playlist */
+
+static int
+save_playlist (const char *path, struct fuse_file_info *fi)
+{
+    DBG("save_playlist");
+    int ret=0;
+
+    LIBMTP_playlist_t *playlist;
+    FILE *file = NULL;
+    char item_path[1024];
+    uint32_t item_id=0;
+    uint32_t *tracks;
+    gchar **fields;
+    GSList *tmplist=NULL;
+
+    fields = g_strsplit(path,"/",-1);
+    gchar *playlist_name;
+    playlist_name = g_strndup(fields[2],strlen(fields[2])-4);
+    DBG("Adding:%s",playlist_name);
+    g_strfreev(fields);
+
+    playlist=LIBMTP_new_playlist_t();
+    playlist->name=g_strdup(playlist_name);
+
+    file = fdopen(fi->fh,"r");
+    while (fgets(item_path,sizeof(item_path)-1,file) != NULL){
+        g_strchomp(item_path);
+        item_id = parse_path(item_path);
+        if (item_id != -1) {
+            tmplist = g_slist_append(tmplist,GUINT_TO_POINTER(item_id));
+            DBG("Adding to tmplist:%d",item_id);
+        }
+    }
+    playlist->no_tracks = g_slist_length(tmplist);
+    tracks = g_malloc(playlist->no_tracks * sizeof(uint32_t));
+    int i;
+    for (i = 0; i < playlist->no_tracks; i++) {
+            tracks[i]=(uint32_t)GPOINTER_TO_UINT(g_slist_nth_data(tmplist,i));
+            DBG("Adding:%d-%d",i,tracks[i]);
+    }
+    playlist->tracks = tracks;
+    DBG("Total:%d",playlist->no_tracks);
+
+    int playlist_id = 0;
+    LIBMTP_playlist_t *tmp_playlist;
+    check_playlists();
+    tmp_playlist=playlists;
+    while (tmp_playlist != NULL){
+        if (g_ascii_strcasecmp(tmp_playlist->name,playlist_name) == 0){
+            playlist_id=playlist->playlist_id;
+        }
+        tmp_playlist=tmp_playlist->next;
+    }
+
+    if (playlist_id > 0) {
+        DBG("Update playlist %d",playlist_id);
+        playlist->playlist_id=playlist_id;
+        ret = LIBMTP_Update_Playlist(device,playlist);
+    } else {
+        DBG("New playlist");
+        ret = LIBMTP_Create_New_Playlist(device,playlist);
+    }
+    playlists_changed=TRUE;
+    return ret;
+}
+
+/* Find the file type based on extension */
+static LIBMTP_filetype_t
+find_filetype (const gchar * filename)
+{
+    DBG("find_filetype");
+    gchar **fields;
+    fields = g_strsplit (filename, ".", -1);
+    gchar *ptype;
+    ptype = g_strdup (fields[g_strv_length (fields) - 1]);
+    g_strfreev (fields);
+    LIBMTP_filetype_t filetype;
+
+    // This need to be kept constantly updated as new file types arrive.
+    if (!g_ascii_strncasecmp (ptype, "wav",3)) {
+        filetype = LIBMTP_FILETYPE_WAV;
+    } else if (!g_ascii_strncasecmp (ptype, "mp3",3)) {
+        filetype = LIBMTP_FILETYPE_MP3;
+    } else if (!g_ascii_strncasecmp (ptype, "wma",3)) {
+        filetype = LIBMTP_FILETYPE_WMA;
+    } else if (!g_ascii_strncasecmp (ptype, "ogg",3)) {
+        filetype = LIBMTP_FILETYPE_OGG;
+    } else if (!g_ascii_strncasecmp (ptype, "aa",2)) {
+        filetype = LIBMTP_FILETYPE_AUDIBLE;
+    } else if (!g_ascii_strncasecmp (ptype, "mp4",3)) {
+        filetype = LIBMTP_FILETYPE_MP4;
+    } else if (!g_ascii_strncasecmp (ptype, "wmv",3)) {
+        filetype = LIBMTP_FILETYPE_WMV;
+    } else if (!g_ascii_strncasecmp (ptype, "avi",3)) {
+        filetype = LIBMTP_FILETYPE_AVI;
+    } else if (!g_ascii_strncasecmp (ptype, "mpeg",4) || !g_ascii_strncasecmp (ptype, "mpg",3)) {
+        filetype = LIBMTP_FILETYPE_MPEG;
+    } else if (!g_ascii_strncasecmp (ptype, "asf",3)) {
+        filetype = LIBMTP_FILETYPE_ASF;
+    } else if (!g_ascii_strncasecmp (ptype, "qt",2) || !g_ascii_strncasecmp (ptype, "mov",3)) {
+        filetype = LIBMTP_FILETYPE_QT;
+    } else if (!g_ascii_strncasecmp (ptype, "wma",3)) {
+        filetype = LIBMTP_FILETYPE_WMA;
+    } else if (!g_ascii_strncasecmp (ptype, "jpg",3) || !g_ascii_strncasecmp (ptype, "jpeg",4)) {
+        filetype = LIBMTP_FILETYPE_JPEG;
+    } else if (!g_ascii_strncasecmp (ptype, "jfif",4)) {
+        filetype = LIBMTP_FILETYPE_JFIF;
+    } else if (!g_ascii_strncasecmp (ptype, "tif",3) || !g_ascii_strncasecmp (ptype, "tiff",4)) {
+        filetype = LIBMTP_FILETYPE_TIFF;
+    } else if (!g_ascii_strncasecmp (ptype, "bmp",3)) {
+        filetype = LIBMTP_FILETYPE_BMP;
+    } else if (!g_ascii_strncasecmp (ptype, "gif",3)) {
+        filetype = LIBMTP_FILETYPE_GIF;
+    } else if (!g_ascii_strncasecmp (ptype, "pic",3) || !g_ascii_strncasecmp (ptype, "pict",4)) {
+        filetype = LIBMTP_FILETYPE_PICT;
+    } else if (!g_ascii_strncasecmp (ptype, "png",3)) {
+        filetype = LIBMTP_FILETYPE_PNG;
+    } else if (!g_ascii_strncasecmp (ptype, "wmf",3)) {
+        filetype = LIBMTP_FILETYPE_WINDOWSIMAGEFORMAT;
+    } else if (!g_ascii_strncasecmp (ptype, "ics",3)) {
+        filetype = LIBMTP_FILETYPE_VCALENDAR2;
+    } else if (!g_ascii_strncasecmp (ptype, "exe",3) || !g_ascii_strncasecmp (ptype, "com",3) ||
+               !g_ascii_strncasecmp (ptype, "bat",3) || !g_ascii_strncasecmp (ptype, "dll",3) ||
+               !g_ascii_strncasecmp (ptype, "sys",3)) {
+        filetype = LIBMTP_FILETYPE_WINEXEC;
+    } else if (!g_ascii_strncasecmp (ptype, "txt",3)) {
+        filetype = LIBMTP_FILETYPE_TEXT;
+    } else if (!g_ascii_strncasecmp (ptype, "htm",3) || !g_ascii_strncasecmp (ptype, "html",4) ) {
+        filetype = LIBMTP_FILETYPE_HTML;
+    } else if (!g_ascii_strncasecmp (ptype, "bin",3)) {
+        filetype = LIBMTP_FILETYPE_FIRMWARE;
+    } else if (!g_ascii_strncasecmp (ptype, "aac",3)) {
+        filetype = LIBMTP_FILETYPE_AAC;
+    } else if (!g_ascii_strncasecmp (ptype, "flac",4) || !g_ascii_strncasecmp (ptype, "fla",3)) {
+        filetype = LIBMTP_FILETYPE_FLAC;
+    } else if (!g_ascii_strncasecmp (ptype, "mp2",3)) {
+        filetype = LIBMTP_FILETYPE_MP2;
+    } else if (!g_ascii_strncasecmp (ptype, "m4a",3)) {
+        filetype = LIBMTP_FILETYPE_M4A;
+    } else if (!g_ascii_strncasecmp (ptype, "doc",3)) {
+        filetype = LIBMTP_FILETYPE_DOC;
+    } else if (!g_ascii_strncasecmp (ptype, "xml",3)) {
+        filetype = LIBMTP_FILETYPE_XML;
+    } else if (!g_ascii_strncasecmp (ptype, "xls",3)) {
+        filetype = LIBMTP_FILETYPE_XLS;
+    } else if (!g_ascii_strncasecmp (ptype, "ppt",3)) {
+        filetype = LIBMTP_FILETYPE_PPT;
+    } else if (!g_ascii_strncasecmp (ptype, "mht",3)) {
+        filetype = LIBMTP_FILETYPE_MHT;
+    } else if (!g_ascii_strncasecmp (ptype, "jp2",3)) {
+        filetype = LIBMTP_FILETYPE_JP2;
+    } else if (!g_ascii_strncasecmp (ptype, "jpx",3)) {
+        filetype = LIBMTP_FILETYPE_JPX;
+    } else {
+        DBG("Sorry, file type \"%s\" is not yet supported", ptype);
+        DBG("Tagging as unknown file type.");
+        filetype = LIBMTP_FILETYPE_UNKNOWN;
+    }
+    g_free (ptype);
+    return filetype;
 }
 
 static int
