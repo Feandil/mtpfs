@@ -1390,7 +1390,6 @@ static struct fuse_operations mtpfs_oper = {
 int
 main (int argc, char *argv[])
 {
-    int fuse_stat;
     umask (0);
     LIBMTP_raw_device_t * rawdevices;
     int numrawdevices;
@@ -1499,9 +1498,7 @@ main (int argc, char *argv[])
 
     DBG("Start fuse");
 
-    fuse_stat=fuse_main (argc, argv, &mtpfs_oper);
-    DBG("fuse_main returned %d\n", fuse_stat);
-    return fuse_stat;
+    return fuse_main(argc, argv, &mtpfs_oper);
 }
 
 #ifdef USEMAD
