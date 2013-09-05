@@ -1479,9 +1479,12 @@ main (int argc, char *argv[])
     /* Get all storages for this device */
     int ret = LIBMTP_Get_Storage(device, LIBMTP_STORAGE_SORTBY_NOTSORTED);
     if (ret != 0) {
-        fprintf(stdout,"LIBMTP_Get_Storage() failed:%d\n",ret);
-        LIBMTP_Dump_Errorstack(device);
-        LIBMTP_Clear_Errorstack(device);
+        if (ret == 1) {
+            fprintf(stdout, "LIBMTP_Get_Storage() failed: unable to get storage properties\n");
+        } else {
+            fprintf(stdout,"LIBMTP_Get_Storage() failed:%d\n", ret);
+        }
+        dump_mtp_error();
         return 1;
     }
 
