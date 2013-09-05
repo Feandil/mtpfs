@@ -88,7 +88,7 @@ check_lost_files ()
                 parent_found = TRUE;
             } else {
                 int i;
-                for (i=0;i<4;i++) {
+                for (i = 0; i < MAX_STORAGE_AREA; ++i) {
                     if (storageArea[i].folders!=NULL) {
                         if (LIBMTP_Find_Folder (storageArea[i].folders, item->parent_id) != NULL) {
                             parent_found = FALSE;
@@ -113,7 +113,7 @@ void
 check_folders ()
 {
     int i;
-    for (i=0;i<4;i++) {
+    for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].folders_changed) {
             DBG("Refreshing Folderlist %d-%s", i,storageArea[i].storage->StorageDescription);
             LIBMTP_folder_t *newfolders = NULL;
@@ -325,7 +325,7 @@ find_storage(const gchar * path)
         storage_len = second_slash - path;
     }
 
-    for (i=0; i<4; i++) {
+    for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].storage != NULL) {
             if ((storage_len == strlen(storageArea[i].storage->StorageDescription)) &&
                 (strncmp(storageArea[i].storage->StorageDescription, path, storage_len) == 0)) {
@@ -663,7 +663,7 @@ mtpfs_destroy ()
     enter_lock("destroy");
     if (files) free_files(files);
     int i;
-    for (i=0;i<4;i++) {
+    for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].folders) LIBMTP_destroy_folder_t(storageArea[i].folders);
     }
     if (playlists) free_playlists(playlists);
