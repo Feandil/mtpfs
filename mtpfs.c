@@ -66,8 +66,6 @@ static LIBMTP_file_t *files = NULL;
 static gboolean files_changed = TRUE;
 static GSList *lostfiles = NULL;
 static GSList *myfiles = NULL;
-static LIBMTP_playlist_t *playlists = NULL;
-static gboolean playlists_changed = FALSE;
 
 G_LOCK_DEFINE_STATIC(device_lock);
 #define enter_lock(a...)       do { G_LOCK(device_lock); } while(0)
@@ -83,17 +81,6 @@ free_files(LIBMTP_file_t *filelist)
         tmp = file;
         file = file->next;
         LIBMTP_destroy_file_t(tmp);
-    }
-}
-
-static void
-free_playlists(LIBMTP_playlist_t *pl)
-{
-    LIBMTP_playlist_t *playlist = pl, *tmp;
-    while (playlist) {
-        tmp = playlist;
-        playlist = playlist->next;
-        LIBMTP_destroy_playlist_t(tmp);
     }
 }
 
@@ -167,19 +154,6 @@ check_folders ()
             newfolders = NULL;
             storageArea[i].folders_changed= FALSE;
         }
-    }
-}
-
-static void
-check_playlists ()
-{
-    if (playlists_changed) {
-        DBG("Refreshing Playlists");
-        LIBMTP_playlist_t *newplaylists;
-        if (playlists) free_playlists(playlists);
-        newplaylists = LIBMTP_Get_Playlist_List(device);
-        playlists = newplaylists;
-        playlists_changed = FALSE;
     }
 }
 
@@ -289,27 +263,6 @@ parse_path (const gchar * path)
     if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL)
         return 0;
 
-    // Check Playlists
-    if (strncmp("/Playlists",path,10) == 0) {
-        LIBMTP_playlist_t *playlist;
-
-        res = -ENOENT;
-        check_playlists();
-        playlist=playlists;
-        while (playlist != NULL) {
-            gchar *tmppath;
-            tmppath = g_strconcat("/Playlists/",playlist->name,".m3u",NULL);
-            if (g_ascii_strcasecmp(path,tmppath) == 0) {
-                res = playlist->playlist_id;
-                g_free (tmppath);
-                break;
-            }
-            g_free (tmppath);
-            playlist = playlist->next;
-        }
-        return res;
-    }
-
     // Check lost+found
     if (strncmp("/lost+found", path, 11) == 0) {
         GSList *item;
@@ -384,73 +337,6 @@ parse_path (const gchar * path)
     g_strfreev (fields);
     DBG("parse_path exiting:%s - %d",path,res);
     return res;
-}
-
-/* Saving playlist */
-
-static int
-save_playlist (const char *path, struct fuse_file_info *fi)
-{
-    DBG("save_playlist");
-    int ret=0;
-
-    LIBMTP_playlist_t *playlist;
-    FILE *file = NULL;
-    char item_path[1024];
-    uint32_t item_id=0;
-    uint32_t *tracks;
-    gchar **fields;
-    GSList *tmplist=NULL;
-
-    fields = g_strsplit(path,"/",-1);
-    gchar *playlist_name;
-    playlist_name = g_strndup(fields[2],strlen(fields[2])-4);
-    DBG("Adding:%s",playlist_name);
-    g_strfreev(fields);
-
-    playlist=LIBMTP_new_playlist_t();
-    playlist->name=g_strdup(playlist_name);
-
-    file = fdopen(fi->fh,"r");
-    while (fgets(item_path,sizeof(item_path)-1,file) != NULL){
-        g_strchomp(item_path);
-        item_id = parse_path(item_path);
-        if (item_id != -1) {
-            tmplist = g_slist_append(tmplist,GUINT_TO_POINTER(item_id));
-            DBG("Adding to tmplist:%d",item_id);
-        }
-    }
-    playlist->no_tracks = g_slist_length(tmplist);
-    tracks = g_malloc(playlist->no_tracks * sizeof(uint32_t));
-    int i;
-    for (i = 0; i < playlist->no_tracks; i++) {
-            tracks[i]=(uint32_t)GPOINTER_TO_UINT(g_slist_nth_data(tmplist,i));
-            DBG("Adding:%d-%d",i,tracks[i]);
-    }
-    playlist->tracks = tracks;
-    DBG("Total:%d",playlist->no_tracks);
-
-    int playlist_id = 0;
-    LIBMTP_playlist_t *tmp_playlist;
-    check_playlists();
-    tmp_playlist=playlists;
-    while (tmp_playlist != NULL){
-        if (g_ascii_strcasecmp(tmp_playlist->name,playlist_name) == 0){
-            playlist_id=playlist->playlist_id;
-        }
-        tmp_playlist=tmp_playlist->next;
-    }
-
-    if (playlist_id > 0) {
-        DBG("Update playlist %d",playlist_id);
-        playlist->playlist_id=playlist_id;
-        ret = LIBMTP_Update_Playlist(device,playlist);
-    } else {
-        DBG("New playlist");
-        ret = LIBMTP_Create_New_Playlist(device,playlist);
-    }
-    playlists_changed=TRUE;
-    return ret;
 }
 
 /* Find the file type based on extension */
@@ -559,138 +445,67 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
 
     item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
     if (item != NULL) {
-        if (strncmp("/Playlists/",path,11) == 0) {
-            save_playlist(path,fi);
-        } else {
-            //find parent id
-            gchar *filename = g_strdup("");
-            gchar **fields;
-            gchar *directory;
-            directory = (gchar *) g_malloc (strlen (path));
-            directory = strcpy (directory, "/");
-            fields = g_strsplit (path, "/", -1);
-            int i;
-            int parent_id = 0;
-            int storageid;
-            storageid = find_storage(path);
-            for (i = 0; fields[i] != NULL; i++) {
-                if (strlen (fields[i]) > 0) {
-                    if (fields[i + 1] == NULL) {
-                        gchar *tmp = g_strndup (directory, strlen (directory) - 1);
-                        parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
-                        g_free (tmp);
-                        if (parent_id < 0)
-                            parent_id = 0;
-                        g_free (filename);
-                        filename = g_strdup (fields[i]);
-                    } else {
-                        directory = strcat (directory, fields[i]);
-                        directory = strcat (directory, "/");
-                    }
-                }
-            }
-            DBG("%s:%s:%d", filename, directory, parent_id);
-
-            struct stat st;
-            uint64_t filesize;
-            fstat (fi->fh, &st);
-            filesize = (uint64_t) st.st_size;
-
-            // Setup file
-            LIBMTP_filetype_t filetype;
-            filetype = find_filetype (filename);
-            #ifdef USEMAD
-            if (filetype == LIBMTP_FILETYPE_MP3) {
-                LIBMTP_track_t *genfile;
-                genfile = LIBMTP_new_track_t ();
-                gint songlen;
-                struct id3_file *id3_fh;
-                struct id3_tag *tag;
-                gchar *tracknum;
-
-
-                id3_fh = id3_file_fdopen (fi->fh, ID3_FILE_MODE_READONLY);
-                tag = id3_file_tag (id3_fh);
-
-                genfile->artist = getArtist (tag);
-                genfile->title = getTitle (tag);
-                genfile->album = getAlbum (tag);
-                genfile->genre = getGenre (tag);
-                genfile->date = getYear (tag);
-                genfile->usecount = 0;
-                genfile->parent_id = (uint32_t) parent_id;
-                genfile->storage_id = storageArea[storageid].storage->id;
-
-                /* If there is a songlength tag it will take
-                 * precedence over any length calculated from
-                 * the bitrate and filesize */
-                songlen = getSonglen (tag);
-                if (songlen > 0) {
-                    genfile->duration = songlen * 1000;
+        //find parent id
+        gchar *filename = g_strdup("");
+        gchar **fields;
+        gchar *directory;
+        directory = (gchar *) g_malloc (strlen (path));
+        directory = strcpy (directory, "/");
+        fields = g_strsplit (path, "/", -1);
+        int i;
+        int parent_id = 0;
+        int storageid;
+        storageid = find_storage(path);
+        for (i = 0; fields[i] != NULL; i++) {
+            if (strlen (fields[i]) > 0) {
+                if (fields[i + 1] == NULL) {
+                    gchar *tmp = g_strndup (directory, strlen (directory) - 1);
+                    parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
+                    g_free (tmp);
+                    if (parent_id < 0)
+                        parent_id = 0;
+                    g_free (filename);
+                    filename = g_strdup (fields[i]);
                 } else {
-                    genfile->duration = (uint16_t)calc_length(fi->fh) * 1000;
-                    //genfile->duration = 293000;
+                    directory = strcat (directory, fields[i]);
+                    directory = strcat (directory, "/");
                 }
-
-                tracknum = getTracknum (tag);
-                if (tracknum != NULL) {
-                    genfile->tracknumber = strtoul(tracknum,NULL,10);
-                } else {
-                    genfile->tracknumber = 0;
-                }
-                g_free (tracknum);
-
-                // Compensate for missing tag information
-                if (!genfile->artist)
-                    genfile->artist = g_strdup("<Unknown>");
-                if (!genfile->title)
-                    genfile->title = g_strdup("<Unknown>");
-                if (!genfile->album)
-                    genfile->album = g_strdup("<Unknown>");
-                if (!genfile->genre)
-                    genfile->genre = g_strdup("<Unknown>");
-
-                genfile->filesize = filesize;
-                genfile->filetype = filetype;
-                genfile->filename = g_strdup (filename);
-                //title,artist,genre,album,date,tracknumber,duration,samplerate,nochannels,wavecodec,bitrate,bitratetype,rating,usecount
-                //DBG("%d:%d:%d",fi->fh,genfile->duration,genfile->filesize);
-                ret =
-                    LIBMTP_Send_Track_From_File_Descriptor (device, fi->fh,
-                        genfile, NULL, NULL);
-                id3_file_close (id3_fh);
-                LIBMTP_destroy_track_t (genfile);
-                DBG("Sent TRACK %s",path);
-            } else {
-            #endif
-                LIBMTP_file_t *genfile;
-                genfile = LIBMTP_new_file_t ();
-                genfile->filesize = filesize;
-                genfile->filetype = filetype;
-                genfile->filename = g_strdup (filename);
-                genfile->parent_id = (uint32_t) parent_id;
-                genfile->storage_id = storageArea[storageid].storage->id;
-
-                ret =
-                    LIBMTP_Send_File_From_File_Descriptor (device, fi->fh,
-                        genfile, NULL, NULL);
-                LIBMTP_destroy_file_t (genfile);
-                DBG("Sent FILE %s",path);
-            #ifdef USEMAD
             }
-            #endif
-            if (ret == 0) {
-                DBG("Sent %s",path);
-            } else {
-                DBG("Problem sending %s - %d",path,ret);
-            }
-            // Cleanup
-            g_strfreev (fields);
-            g_free (filename);
-            g_free (directory);
-            // Refresh filelist
-            files_changed = TRUE;
         }
+        DBG("%s:%s:%d", filename, directory, parent_id);
+
+        struct stat st;
+        uint64_t filesize;
+        fstat (fi->fh, &st);
+        filesize = (uint64_t) st.st_size;
+
+        // Setup file
+        LIBMTP_filetype_t filetype;
+        filetype = find_filetype (filename);
+        LIBMTP_file_t *genfile;
+        genfile = LIBMTP_new_file_t ();
+        genfile->filesize = filesize;
+        genfile->filetype = filetype;
+        genfile->filename = g_strdup (filename);
+        genfile->parent_id = (uint32_t) parent_id;
+        genfile->storage_id = storageArea[storageid].storage->id;
+
+        ret =
+            LIBMTP_Send_File_From_File_Descriptor (device, fi->fh,
+                genfile, NULL, NULL);
+        LIBMTP_destroy_file_t (genfile);
+        DBG("Sent FILE %s",path);
+        if (ret == 0) {
+            DBG("Sent %s",path);
+        } else {
+            DBG("Problem sending %s - %d",path,ret);
+        }
+        // Cleanup
+        g_strfreev (fields);
+        g_free (filename);
+        g_free (directory);
+        // Refresh filelist
+        files_changed = TRUE;
         if (item->data) {
             g_free (item->data);
         }
@@ -710,7 +525,6 @@ mtpfs_destroy ()
     for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].folders) LIBMTP_destroy_folder_t(storageArea[i].folders);
     }
-    if (playlists) free_playlists(playlists);
     if (device) LIBMTP_Release_Device (device);
     return_unlock();
 }
@@ -728,7 +542,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
 
     // If in root directory
     if (strcmp(path,"/") == 0) {
-        filler (buf, "Playlists", NULL, 0);
         if (lostfiles != NULL) {
             filler (buf, "lost+found", NULL, 0);
         }
@@ -740,31 +553,6 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
             st.st_ino = storage->id;
             st.st_mode = S_IFREG | 0555;
             filler (buf, storage->StorageDescription, &st, 0);
-        }
-        return_unlock(0);
-    }
-
-    // Are we looking at the playlists?
-    if (strncmp (path, "/Playlists",10) == 0) {
-        DBG("Checking Playlists");
-        LIBMTP_playlist_t *playlist;
-        check_playlists();
-        playlist=playlists;
-        while (playlist!= NULL) {
-            struct stat st;
-            memset (&st, 0, sizeof (st));
-            st.st_ino = playlist->playlist_id;
-            st.st_mode = S_IFREG | 0666;
-            gchar *name;
-            name = g_strconcat(playlist->name,".m3u",NULL);
-            DBG("Playlist:%s",name);
-            if (filler (buf, name, &st, 0))
-            {
-                g_free (name);
-                break;
-            }
-            g_free (name);
-            playlist=playlist->next;
         }
         return_unlock(0);
     }
@@ -884,42 +672,6 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
     int storageid;
     storageid=find_storage(path);
 
-    if (g_ascii_strncasecmp (path, "/Playlists",10) == 0) {
-        LIBMTP_playlist_t *playlist;
-        check_playlists();
-        playlist=playlists;
-        while (playlist != NULL) {
-            gchar *tmppath;
-            tmppath = g_strconcat("/Playlists/",playlist->name,".m3u",NULL);
-            if (g_ascii_strcasecmp(path,tmppath) == 0) {
-                int filesize = 0;
-                int i;
-                for (i=0; i <playlist->no_tracks; i++){
-                    LIBMTP_file_t *file;
-                    LIBMTP_folder_t *folder;
-                    file = LIBMTP_Get_Filemetadata(device,playlist->tracks[i]);
-                    if (file != NULL) {
-                        int parent_id = file->parent_id;
-                        filesize = filesize + strlen(file->filename) + 2;
-                        while (parent_id != 0) {
-                            check_folders();
-                            folder = LIBMTP_Find_Folder(storageArea[i].folders,parent_id);
-                            parent_id = folder->parent_id;
-                            filesize = filesize + strlen(folder->name) + 1;
-                        }
-                    }
-                }
-                stbuf->st_mode = S_IFREG | 0777;
-                stbuf->st_size = filesize;
-                stbuf->st_blocks = 2;
-                stbuf->st_mtime = time(NULL);
-                return_unlock(0);
-            }
-            playlist = playlist->next;
-        }
-        return_unlock(-ENOENT);
-    }
-
     if (strncasecmp (path, "/lost+found",11) == 0) {
         GSList *item;
         int item_id = parse_path (path);
@@ -1028,48 +780,6 @@ mtpfs_open (const gchar * path, struct fuse_file_info *fi)
     if (tmpfile != -1) {
         if (item_id == 0) {
             fi->fh = tmpfile;
-        } else if (strncmp("/Playlists/",path,11) == 0) {
-            // Is a playlist
-            gchar **fields;
-            fields = g_strsplit(path,"/",-1);
-            gchar *name;
-            name = g_strndup(fields[2],strlen(fields[2])-4);
-            g_strfreev(fields);
-            fi->fh = tmpfile;
-            LIBMTP_playlist_t *playlist;
-            check_playlists();
-            playlist = playlists;
-            while (playlist != NULL) {
-                if (g_ascii_strcasecmp(playlist->name,name) == 0 ) {
-                    //int playlist_id=playlist->playlist_id;
-                    int i;
-                    for (i=0; i <playlist->no_tracks; i++){
-                        LIBMTP_file_t *file;
-                        LIBMTP_folder_t *folder;
-                        file = LIBMTP_Get_Filemetadata(device,playlist->tracks[i]);
-                        if (file != NULL) {
-                            gchar *path;
-                            path = (gchar *) g_malloc (1024);
-                            path = strcpy(path,"/");
-                            int parent_id = file->parent_id;
-                            while (parent_id != 0) {
-                                check_folders();
-                                folder = LIBMTP_Find_Folder(storageArea[storageid].folders,parent_id);
-                                path = strcat(path,folder->name);
-                                path = strcat(path,"/");
-                                parent_id = folder->parent_id;
-                            }
-                            path = strcat (path,file->filename);
-                            fprintf (filetmp,"%s\n",path);
-                            DBG("%s\n",path);
-                        }
-                    }
-                    //LIBMTP_destroy_file_t(file);
-                    fflush(filetmp);
-                    break;
-                }
-                playlist=playlist->next;
-            }
         } else {
             int ret =
                 LIBMTP_Get_File_To_File_Descriptor (device, item_id, tmpfile,
@@ -1134,8 +844,6 @@ mtpfs_unlink (const gchar * path)
     ret = LIBMTP_Delete_Object (device, item_id);
     if (ret != 0)
       LIBMTP_Dump_Errorstack (device);
-    if (strncmp (path, "/Playlists",10) == 0) {
-        playlists_changed = TRUE;
     } else {
         files_changed = TRUE;
     }
@@ -1351,10 +1059,6 @@ mtpfs_statvfs (const char *path, struct statvfs *stbuf)
 
     stbuf->f_bsize = 1024;
 
-    if (strncmp("/Playlists", path, 10) == 0) {
-        return -ENOSYS;
-    }
-
     storage_id = find_storage(path);
     if (storage_id == -1) {
         stbuf->f_blocks = 0;
@@ -1381,7 +1085,6 @@ mtpfs_init ()
 {
     DBG("mtpfs_init");
     files_changed=TRUE;
-    playlists_changed=TRUE;
     DBG("Ready");
     return 0;
 }
@@ -1525,244 +1228,3 @@ main (int argc, char *argv[])
     DBG("Start fuse");
     return fuse_main(argc, argv, &mtpfs_oper, NULL); //TODO: use privdata instead of static vars
 }
-
-#ifdef USEMAD
-/* XING parsing is from the MAD winamp input plugin */
-
-struct xing {
-      int flags;
-      unsigned long frames;
-      unsigned long bytes;
-      unsigned char toc[100];
-      long scale;
-};
-
-enum {
-      XING_FRAMES = 0x0001,
-      XING_BYTES  = 0x0002,
-      XING_TOC    = 0x0004,
-      XING_SCALE  = 0x0008
-};
-
-# define XING_MAGIC     (('X' << 24) | ('i' << 16) | ('n' << 8) | 'g')
-
-
-
-/* Following two function are adapted from mad_timer, from the
-   libmad distribution */
-static
-int parse_xing(struct xing *xing, struct mad_bitptr ptr, unsigned int bitlen)
-{
-  if (bitlen < 64 || mad_bit_read(&ptr, 32) != XING_MAGIC)
-    goto fail;
-
-  xing->flags = mad_bit_read(&ptr, 32);
-  bitlen -= 64;
-
-  if (xing->flags & XING_FRAMES) {
-    if (bitlen < 32)
-      goto fail;
-
-    xing->frames = mad_bit_read(&ptr, 32);
-    bitlen -= 32;
-  }
-
-  if (xing->flags & XING_BYTES) {
-    if (bitlen < 32)
-      goto fail;
-
-    xing->bytes = mad_bit_read(&ptr, 32);
-    bitlen -= 32;
-  }
-
-  if (xing->flags & XING_TOC) {
-    int i;
-
-    if (bitlen < 800)
-      goto fail;
-
-    for (i = 0; i < 100; ++i)
-      xing->toc[i] = mad_bit_read(&ptr, 8);
-
-    bitlen -= 800;
-  }
-
-  if (xing->flags & XING_SCALE) {
-    if (bitlen < 32)
-      goto fail;
-
-    xing->scale = mad_bit_read(&ptr, 32);
-    bitlen -= 32;
-  }
-
-  return 1;
- fail:
-  xing->flags = 0;
-  return 0;
-}
-
-
-static int scan(void const *ptr, ssize_t len)
-{
-    int duration = 0;
-    struct mad_stream stream;
-    struct mad_header header;
-    struct xing xing;
-    xing.frames=0;
-
-    unsigned long bitrate = 0;
-    int has_xing = 0;
-    int is_vbr = 0;
-    mad_stream_init(&stream);
-    mad_header_init(&header);
-
-    mad_stream_buffer(&stream, ptr, len);
-
-    int num_frames = 0;
-
-    /* There are three ways of calculating the length of an mp3:
-      1) Constant bitrate: One frame can provide the information
-         needed: # of frames and duration. Just see how long it
-         is and do the division.
-      2) Variable bitrate: Xing tag. It provides the number of
-         frames. Each frame has the same number of samples, so
-         just use that.
-      3) All: Count up the frames and duration of each frames
-         by decoding each one. We do this if we've no other
-         choice, i.e. if it's a VBR file with no Xing tag.
-    */
-
-    while (1)
-    {
-        if (mad_header_decode(&header, &stream) == -1)
-        {
-            if (MAD_RECOVERABLE(stream.error))
-                continue;
-            else
-                break;
-        }
-
-        /* Limit xing testing to the first frame header */
-        if (!num_frames++)
-        {
-            if(parse_xing(&xing, stream.anc_ptr, stream.anc_bitlen))
-            {
-                is_vbr = 1;
-
-                if (xing.flags & XING_FRAMES)
-                {
-                    /* We use the Xing tag only for frames. If it doesn't have that
-                       information, it's useless to us and we have to treat it as a
-                       normal VBR file */
-                    has_xing = 1;
-                    num_frames = xing.frames;
-                    break;
-                }
-            }
-        }
-
-        /* Test the first n frames to see if this is a VBR file */
-        if (!is_vbr && !(num_frames > 20))
-        {
-            if (bitrate && header.bitrate != bitrate)
-            {
-                is_vbr = 1;
-            }
-
-            else
-            {
-                bitrate = header.bitrate;
-            }
-        }
-
-        /* We have to assume it's not a VBR file if it hasn't already been
-           marked as one and we've checked n frames for different bitrates */
-        else if (!is_vbr)
-        {
-            break;
-        }
-
-        duration = header.duration.seconds;
-    }
-
-    if (!is_vbr)
-    {
-        double time = (len * 8.0) / (header.bitrate); /* time in seconds */
-        //double timefrac = (double)time - ((long)(time));
-        long nsamples = 32 * MAD_NSBSAMPLES(&header); /* samples per frame */
-
-        /* samplerate is a constant */
-        num_frames = (long) (time * header.samplerate / nsamples);
-
-        duration = (int)time;
-        DBG("d:%d",duration);
-    }
-
-    else if (has_xing)
-    {
-        /* modify header.duration since we don't need it anymore */
-        mad_timer_multiply(&header.duration, num_frames);
-        duration = header.duration.seconds;
-    }
-
-    else
-    {
-        /* the durations have been added up, and the number of frames
-           counted. We do nothing here. */
-    }
-
-    mad_header_finish(&header);
-    mad_stream_finish(&stream);
-    return duration;
-}
-
-
-int calc_length(int f)
-{
-    struct stat filestat;
-    void *fdm;
-    char buffer[3];
-
-    fstat(f, &filestat);
-
-    /* TAG checking is adapted from XMMS */
-    int length = filestat.st_size;
-
-    if (lseek(f, -128, SEEK_END) < 0)
-    {
-        /* File must be very short or empty. Forget it. */
-        return -1;
-    }
-
-    if (read(f, buffer, 3) != 3)
-    {
-        return -1;
-    }
-
-    if (!strncmp(buffer, "TAG", 3))
-    {
-        length -= 128; /* Correct for id3 tags */
-    }
-
-    fdm = mmap(0, length, PROT_READ, MAP_SHARED, f, 0);
-    if (fdm == MAP_FAILED)
-    {
-        g_error("Map failed");
-        return -1;
-    }
-
-    /* Scan the file for a XING header, or calculate the length,
-       or just scan the whole file and add everything up. */
-    int duration = scan(fdm, length);
-
-    if (munmap(fdm, length) == -1)
-    {
-        g_error("Unmap failed");
-        return -1;
-    }
-
-    lseek(f, 0, SEEK_SET);
-    return duration;
-}
-
-#endif

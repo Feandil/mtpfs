@@ -18,17 +18,6 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.6 \
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
-AC_ARG_ENABLE([mad],
-    [AS_HELP_STRING([--disable-mad], [disable libmad handling of mp3 files])])
-
-AS_IF([test "x$enable_mad" != "xno"] , [
-    PKG_CHECK_MODULES(MAD, mad >= 0.15 \
-                           id3tag >= 0.15)
-    AC_SUBST(MAD_CFLAGS)
-    AC_SUBST(MAD_LIBS)
-])
-AM_CONDITIONAL([USEMAD], [test "x$enable_mad" != "xno"])
-
 AC_ARG_ENABLE(debug,
               AC_HELP_STRING([--enable-debug],
                              [enable debugging features]),

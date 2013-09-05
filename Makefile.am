@@ -3,8 +3,3 @@ mtpfs_SOURCES = mtpfs.c mtpfs.h
 mtpfs_CPPFLAGS = $(FUSE_CFLAGS) $(GLIB_CFLAGS) $(MTP_CFLAGS)
 mtpfs_LDADD = $(FUSE_LIBS) $(GLIB_LIBS) $(MTP_LIBS)
 
-if USEMAD
-mtpfs_SOURCES += id3read.c id3read.h
-mtpfs_CPPFLAGS += $(MAD_CFLAGS) -DUSEMAD
-mtpfs_LDADD += $(MAD_LIBS)
-endif
