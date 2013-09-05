@@ -473,24 +473,24 @@ parse_path (const gchar * path)
                        (folder_id==-2 && (file->parent_id == 0) && (file->storage_id == storageArea[storageid].storage->id))) {
                         if (file->filename == NULL) DBG("MTPFS filename NULL");
                         if (file->filename != NULL && g_ascii_strcasecmp (file->filename, fields[i]) == 0) {
-                        DBG("found:%d:%s", file->item_id, file->filename);
+                            DBG("found:%d:%s", file->item_id, file->filename);
 
-                        item_id = file->item_id;
-                        break; // found!
+                            item_id = file->item_id;
+                            break; // found!
+                        }
                     }
+                    file = file->next;
                 }
-                file = file->next;
-            }
-            if (item_id < 0) {
-                directory = strcat (directory, "/");
-                directory = strcat (directory, fields[i]);
-                item_id = lookup_folder_id (folder, directory);
-                res = item_id;
-                break;
-            } else {
-                res = item_id;
-                break;
-            }
+                if (item_id < 0) {
+                    directory = strcat (directory, "/");
+                    directory = strcat (directory, fields[i]);
+                    item_id = lookup_folder_id (folder, directory);
+                    res = item_id;
+                    break;
+                } else {
+                    res = item_id;
+                    break;
+                }
             }
         }
     }
