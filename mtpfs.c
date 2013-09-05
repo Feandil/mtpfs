@@ -1342,14 +1342,14 @@ mtpfs_rename (const char *oldname, const char *newname)
 }
 
 static int
-mtpfs_statfs (const char *path, struct statfs *stbuf)
+mtpfs_statvfs (const char *path, struct statvfs *stbuf)
 {
-    DBG("mtpfs_statfs");
-    stbuf->f_bsize=1024;
-    stbuf->f_blocks=device->storage->MaxCapacity/1024;
-    stbuf->f_bfree=device->storage->FreeSpaceInBytes/1024;
-    stbuf->f_ffree=device->storage->FreeSpaceInObjects/1024;
-    stbuf->f_bavail=stbuf->f_bfree;
+    DBG("mtpfs_statvfs");
+    stbuf->f_bsize = 1024;
+    stbuf->f_blocks = device->storage->MaxCapacity / 1024;
+    stbuf->f_bfree = device->storage->FreeSpaceInBytes / 1024;
+    stbuf->f_bavail = stbuf->f_bfree;
+    stbuf->f_ffree = device->storage->FreeSpaceInObjects / 1024;
     return 0;
 }
 
@@ -1500,8 +1500,7 @@ main (int argc, char *argv[])
     }
 
     DBG("Start fuse");
-
-    return fuse_main(argc, argv, &mtpfs_oper);
+    return fuse_main(argc, argv, &mtpfs_oper, NULL); //TODO: use privdata instead of static vars
 }
 
 #ifdef USEMAD
