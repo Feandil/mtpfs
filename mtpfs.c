@@ -555,13 +555,12 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
     enter_lock("release: %s", path);
     // Check cached files first
     GSList *item;
-    item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
+    int ret = 0;
 
+    item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
     if (item != NULL) {
         if (strncmp("/Playlists/",path,11) == 0) {
             save_playlist(path,fi);
-            close (fi->fh);
-            return_unlock(0);
         } else {
             //find parent id
             gchar *filename = g_strdup("");
@@ -598,7 +597,6 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
             filesize = (uint64_t) st.st_size;
 
             // Setup file
-            int ret;
             LIBMTP_filetype_t filetype;
             filetype = find_filetype (filename);
             #ifdef USEMAD
@@ -687,20 +685,20 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
                 DBG("Problem sending %s - %d",path,ret);
             }
             // Cleanup
-            if (item && item->data)
-                g_free (item->data);
-            myfiles = g_slist_remove (myfiles, item->data);
             g_strfreev (fields);
             g_free (filename);
             g_free (directory);
-            close (fi->fh);
             // Refresh filelist
             files_changed = TRUE;
-            return_unlock(ret);
         }
+        if (item->data) {
+            g_free (item->data);
+        }
+        myfiles = g_slist_remove (myfiles, item->data);
     }
     close (fi->fh);
-    return_unlock(0);
+    G_UNLOCK(device_lock);
+    return ret;
 }
 
 void
