@@ -149,9 +149,7 @@ check_folders ()
             if (storageArea[i].folders) {
                 LIBMTP_destroy_folder_t(storageArea[i].folders);
             }
-            newfolders = LIBMTP_Get_Folder_List_For_Storage(device,storageArea[i].storage->id);
-            storageArea[i].folders = newfolders;
-            newfolders = NULL;
+            storageArea[i].folders = LIBMTP_Get_Folder_List_For_Storage(device, storageArea[i].storage->id);
             storageArea[i].folders_changed= FALSE;
         }
     }
