@@ -889,7 +889,7 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
             }
         }
         DBG("%s:%s:%d", filename, directory, parent_id);
-        ret = LIBMTP_Create_Folder (device, filename, parent_id,0);
+        ret = LIBMTP_Create_Folder (device, filename, parent_id, storageArea[storageid].storage->id);
         g_strfreev (fields);
         g_free (directory);
         g_free (filename);
