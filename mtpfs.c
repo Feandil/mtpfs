@@ -101,7 +101,7 @@ check_files ()
 static void
 check_lost_files ()
 {
-    int last_parent_id = -1;
+    uint32_t last_parent_id = 0xFFFFFFFF;
     gboolean last_parent_found = FALSE;
     LIBMTP_file_t *item;
 
@@ -112,7 +112,7 @@ check_lost_files ()
     for (item = files; item != NULL; item = item->next) {
         gboolean parent_found;
 
-        if (last_parent_id == -1 || last_parent_id != item->parent_id) {
+        if (last_parent_id == 0xFFFFFFFF || last_parent_id != item->parent_id) {
             if (item->parent_id == 0) {
                 parent_found = TRUE;
             } else {
@@ -192,21 +192,22 @@ find_storage(const gchar * path)
     return -1;
 }
 
-static int
+static uint32_t
 lookup_folder_id (LIBMTP_folder_t * folder, const gchar * path)
 {
     gchar ** fields;
     gsize pos;
-    int ret;
-    //DBG("lookup_folder_id %s", path);
+    uint32_t ret = 0xFFFFFFFF;
+
+    DBG_F("lookup_folder_id(%p, %s)", folder, path);
 
     if (folder == NULL) {
-        DBG("lookup_folder_id: Empty list");
-        return -1;
+        DBG_F("lookup_folder_id: Empty list");
+        return 0xFFFFFFFF;
     }
     if (path[0] != '/') {
         DBG("lookup_folder_id: Internal error: unexpected root")
-        return -1;
+        return 0xFFFFFFFF;
     }
 
     check_folders();
@@ -215,7 +216,7 @@ lookup_folder_id (LIBMTP_folder_t * folder, const gchar * path)
 
     if (fields[1] == NULL) {
         DBG("lookup_folder_id: Storage dir");
-        return -2;
+        return 0;
     }
 
     //DBG("lookup_folder_id: Strip storage area name");
@@ -246,16 +247,18 @@ lookup_folder_id (LIBMTP_folder_t * folder, const gchar * path)
         return ret;
     }
     DBG("lookup_folder_id %s: not found", path);
-    return -1;
+    return 0xFFFFFFFF;
 }
 
-static int
+static uint32_t
 parse_path (const gchar * path)
 {
-    DBG("parse_path:%s",path);
-    int res;
-    int item_id = -1;
+    uint32_t res;
+    uint32_t item_id = 0xFFFFFFFF;
     int i;
+
+    DBG_F("parse_path(%s)", path);
+
     // Check cached files first
     if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL)
         return 0;
@@ -265,7 +268,7 @@ parse_path (const gchar * path)
         GSList *item;
         gchar *filename  = g_path_get_basename (path);
 
-        res = -ENOENT;
+        res = 0xFFFFFFFF;
         for (item = lostfiles; item != NULL; item = g_slist_next (item) ) {
             LIBMTP_file_t *file = (LIBMTP_file_t *) item->data;
 
@@ -285,7 +288,7 @@ parse_path (const gchar * path)
     directory = (gchar *) g_malloc (strlen (path));
     directory = strcpy (directory, "");
     fields = g_strsplit (path, "/", -1);
-    res = -ENOENT;
+    res = 0xFFFFFFFF;
     int storageid;
     storageid = find_storage(path);
     for (i = 0; fields[i] != NULL; i++) {
@@ -296,7 +299,7 @@ parse_path (const gchar * path)
             } else {
                 check_folders();
                 folder = storageArea[storageid].folders;
-                int folder_id = 0;
+                uint32_t folder_id = 0;
                 if (strcmp (directory, "") != 0) {
                     folder_id = lookup_folder_id (folder, directory);
                 }
@@ -305,8 +308,10 @@ parse_path (const gchar * path)
                 check_files();
                 file = files;
                 while (file != NULL) {
-                    if ((file->parent_id == folder_id) ||
-                       (folder_id==-2 && (file->parent_id == 0) && (file->storage_id == storageArea[storageid].storage->id))) {
+                    if (file->parent_id == folder_id) {
+                        if (folder_id == 0 && (file->storage_id != storageArea[storageid].storage->id)) {
+                            goto next;
+                        }
                         if (file->filename == NULL) DBG("MTPFS filename NULL");
                         if (file->filename != NULL && g_ascii_strcasecmp (file->filename, fields[i]) == 0) {
                             DBG("found:%d:%s", file->item_id, file->filename);
@@ -315,9 +320,10 @@ parse_path (const gchar * path)
                             break; // found!
                         }
                     }
+next:
                     file = file->next;
                 }
-                if (item_id < 0) {
+                if (item_id == 0xFFFFFFFF) {
                     directory = strcat (directory, "/");
                     directory = strcat (directory, fields[i]);
                     item_id = lookup_folder_id (folder, directory);
@@ -450,7 +456,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
         directory = strcpy (directory, "/");
         fields = g_strsplit (path, "/", -1);
         int i;
-        int parent_id = 0;
+        uint32_t parent_id = 0;
         int storageid;
         storageid = find_storage(path);
         for (i = 0; fields[i] != NULL; i++) {
@@ -459,7 +465,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
                     gchar *tmp = g_strndup (directory, strlen (directory) - 1);
                     parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
                     g_free (tmp);
-                    if (parent_id < 0)
+                    if (parent_id == 0xFFFFFFF)
                         parent_id = 0;
                     g_free (filename);
                     filename = g_strdup (fields[i]);
@@ -576,7 +582,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     int storageid = -1;
     storageid=find_storage(path);
     // Get folder listing.
-    int folder_id = 0;
+    uint32_t folder_id = 0;
     if (strcmp (path, "/") != 0) {
         check_folders();
         folder_id = lookup_folder_id (storageArea[storageid].folders, path);
@@ -584,7 +590,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
 
     DBG("Checking folders for %d",storageid);
     check_folders();
-    if (folder_id==-2) {
+    if (folder_id == 0) {
         DBG("Root of storage area");
         folder=storageArea[storageid].folders;
     } else {
@@ -594,8 +600,10 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     }
 
     while (folder != NULL) {
-        if ((folder->parent_id == folder_id) ||
-           (folder_id==-2 && (folder->storage_id == storageArea[storageid].storage->id))) {
+        if (folder->parent_id == folder_id) {
+            if (folder_id == 0 && (folder->storage_id != storageArea[storageid].storage->id)) {
+                goto next_1;
+            }
             DBG("found folder: %s, id %d", folder->name, folder->folder_id);
             struct stat st;
             memset (&st, 0, sizeof (st));
@@ -604,6 +612,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
             if (filler (buf, folder->name, &st, 0))
                 break;
         }
+next_1:
         folder = folder->sibling;
     }
     DBG("Checking folders end");
@@ -614,8 +623,10 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
     check_files();
     file = files;
     while (file != NULL) {
-        if ((file->parent_id == folder_id) ||
-           (folder_id==-2 && (file->parent_id == 0) && (file->storage_id == storageArea[storageid].storage->id))) {
+        if (file->parent_id == folder_id) {
+            if (folder_id == 0 && (file->storage_id != storageArea[storageid].storage->id)) {
+                goto next_2;
+            }
             struct stat st;
             memset (&st, 0, sizeof (st));
             st.st_ino = file->item_id;
@@ -623,6 +634,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
             if (filler (buf, (file->filename == NULL ? "<mtpfs null>" : file->filename), &st, 0))
                 break;
         }
+next_2:
         file = file->next;
     }
     DBG("readdir exit");
@@ -671,7 +683,7 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 
     if (strncasecmp (path, "/lost+found",11) == 0) {
         GSList *item;
-        int item_id = parse_path (path);
+        uint32_t item_id = parse_path (path);
         for (item = lostfiles; item != NULL; item = g_slist_next (item)) {
             LIBMTP_file_t *file = (LIBMTP_file_t *) item->data;
 
@@ -690,10 +702,10 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
         return_unlock(-ENOENT);
     }
 
-    int item_id = -1;
+    uint32_t item_id = 0xFFFFFFF;
     check_folders();
     item_id = lookup_folder_id (storageArea[storageid].folders, path);
-    if (item_id >= 0) {
+    if (item_id != 0xFFFFFFFF) {
         // Must be a folder
         stbuf->st_ino = item_id;
         stbuf->st_mode = S_IFDIR | 0777;
@@ -745,8 +757,9 @@ static int
 mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
 {
     enter_lock("mknod %s", path);
-    int item_id = parse_path (path);
-    if (item_id > 0)
+
+    uint32_t item_id = parse_path (path);
+    if (item_id != 0xFFFFFFFF)
         return_unlock(-EEXIST);
     myfiles = g_slist_append (myfiles, (gpointer) (g_strdup (path)));
     DBG("NEW FILE");
@@ -757,9 +770,8 @@ static int
 mtpfs_open (const gchar * path, struct fuse_file_info *fi)
 {
     enter_lock("open");
-    int item_id = -1;
-    item_id = parse_path (path);
-    if (item_id < 0)
+    uint32_t item_id = parse_path (path);
+    if (item_id != 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
     if (fi->flags == O_RDONLY) {
@@ -801,9 +813,8 @@ mtpfs_read (const gchar * path, gchar * buf, size_t size, off_t offset,
     enter_lock("read");
     int ret;
 
-    int item_id = -1;
-    item_id = parse_path (path);
-    if (item_id < 0)
+    uint32_t item_id = parse_path (path);
+    if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
     ret = pread (fi->fh, buf, size, offset);
@@ -834,9 +845,8 @@ mtpfs_unlink (const gchar * path)
 {
     enter_lock("unlink");
     int ret = 0;
-    int item_id = -1;
-    item_id = parse_path (path);
-    if (item_id < 0)
+    uint32_t item_id = parse_path (path);
+    if (item_id == 0 || item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
     ret = LIBMTP_Delete_Object (device, item_id);
     if (ret != 0) {
@@ -857,9 +867,9 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
     int ret = 0;
     GSList *item;
     item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
-    int item_id = parse_path (path);
+    uint32_t item_id = parse_path (path);
     int storageid = find_storage(path);
-    if ((item == NULL) && (item_id < 0)) {
+    if ((item == NULL) && (item_id == 0xFFFFFFFF)) {
         // Split path and find parent_id
         gchar *filename = g_strdup("");
         gchar **fields;
@@ -877,7 +887,7 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
                     check_folders();
                     parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
                     g_free (tmp);
-                    if (parent_id < 0)
+                    if (parent_id == 0xFFFFFFFF)
                         parent_id = 0;
                     g_free (filename);
                     filename = g_strdup (fields[i]);
@@ -919,13 +929,13 @@ mtpfs_rmdir (const char *path)
 {
     enter_lock("rmdir %s", path);
     int ret = 0;
-    int folder_id = -1;
+    uint32_t folder_id = 0xFFFFFFFF;
     if (strcmp (path, "/") == 0) {
         return_unlock(0);
     }
     int storageid=find_storage(path);
     folder_id = lookup_folder_id (storageArea[storageid].folders, path);
-    if (folder_id < 0)
+    if (folder_id == 0 || folder_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
     LIBMTP_Delete_Object(device, folder_id);
@@ -979,7 +989,7 @@ mtpfs_rename (const char *oldname, const char *newname)
 {
      enter_lock("rename '%s' to '%s'", oldname, newname);
 
-    int folder_id = -1;
+    uint32_t folder_id = 0xFFFFFFFF;
     int folder_empty = 1;
     int ret = -ENOTEMPTY;
     LIBMTP_folder_t *folder;
@@ -990,7 +1000,7 @@ mtpfs_rename (const char *oldname, const char *newname)
     if (strcmp (oldname, "/") != 0) {
         folder_id = lookup_folder_id (storageArea[storageid_old].folders, oldname);
     }
-    if (folder_id < 0)
+    if (folder_id == 0 || folder_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
     check_folders();
