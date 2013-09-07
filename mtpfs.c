@@ -771,7 +771,7 @@ mtpfs_open (const gchar * path, struct fuse_file_info *fi)
 {
     enter_lock("open");
     uint32_t item_id = parse_path (path);
-    if (item_id != 0xFFFFFFFF)
+    if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
     if (fi->flags == O_RDONLY) {
