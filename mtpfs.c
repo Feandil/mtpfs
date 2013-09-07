@@ -240,12 +240,11 @@ lookup_folder_id (LIBMTP_folder_t * folder, const gchar * path)
         }
     }
 
-    g_strfreev(fields);
-
     if (fields[pos] == NULL) {
         DBG("lookup_folder_id %s: found %i", path, ret);
         return ret;
     }
+    g_strfreev(fields);
     DBG("lookup_folder_id %s: not found", path);
     return 0xFFFFFFFF;
 }
