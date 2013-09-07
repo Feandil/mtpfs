@@ -145,7 +145,6 @@ check_folders ()
     for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].folders_changed) {
             DBG("Refreshing Folderlist %d-%s", i,storageArea[i].storage->StorageDescription);
-            LIBMTP_folder_t *newfolders = NULL;
             if (storageArea[i].folders) {
                 LIBMTP_destroy_folder_t(storageArea[i].folders);
             }
