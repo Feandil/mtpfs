@@ -1116,7 +1116,7 @@ static struct fuse_operations mtpfs_oper = {
     .mkdir   = mtpfs_mkdir,
     .rmdir   = mtpfs_rmdir,
     .rename  = mtpfs_rename,
-    .statfs  = mtpfs_statfs,
+    .statfs  = mtpfs_statvfs,
     .init    = mtpfs_init,
 };
 
