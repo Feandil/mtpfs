@@ -285,8 +285,14 @@ parse_path (const gchar * path)
     LIBMTP_folder_t *folder;
     gchar **fields;
     gchar *directory;
-    directory = (gchar *) g_malloc (strlen (path));
-    directory = strcpy (directory, "");
+    size_t path_len = strlen (path) + 1;
+    directory = (gchar *) g_malloc(path_len);
+    if (directory == NULL) {
+        DBG("Memory error")
+        res = 0xFFFFFFFF;
+        goto end;
+    }
+    *directory = '\0';
     fields = g_strsplit (path, "/", -1);
     res = 0xFFFFFFFF;
     int storageid;
@@ -294,8 +300,15 @@ parse_path (const gchar * path)
     for (i = 0; fields[i] != NULL; i++) {
         if (strlen (fields[i]) > 0) {
             if (fields[i + 1] != NULL) {
-                directory = strcat (directory, "/");
-                directory = strcat (directory, fields[i]);
+                if (path_len < (strlen(fields[i]) + 2)) {
+                    DBG("INTERNAL ERROR, please report");
+                    res = 0xFFFFFFFF;
+                    goto freeall;
+                }
+                directory = strncat (directory, "/", path_len);
+                --path_len;
+                directory = strncat (directory, fields[i], path_len);
+                path_len -= strlen(fields[i]);
             } else {
                 check_folders();
                 folder = storageArea[storageid].folders;
@@ -324,8 +337,15 @@ next:
                     file = file->next;
                 }
                 if (item_id == 0xFFFFFFFF) {
-                    directory = strcat (directory, "/");
-                    directory = strcat (directory, fields[i]);
+                    if (path_len < (strlen(fields[i]) + 2)) {
+                        DBG("INTERNAL ERROR, please report");
+                        res = 0xFFFFFFFF;
+                        goto freeall;
+                    }
+                    directory = strncat (directory, "/", path_len);
+                    --path_len;
+                    directory = strncat (directory, fields[i], path_len);
+                    path_len -= strlen(fields[i]);
                     item_id = lookup_folder_id (folder, directory);
                     res = item_id;
                     break;
@@ -336,8 +356,10 @@ next:
             }
         }
     }
-    g_free (directory);
+freeall:
     g_strfreev (fields);
+    g_free (directory);
+end:
     DBG("parse_path exiting:%s - %d",path,res);
     return res;
 }
