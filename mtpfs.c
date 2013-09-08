@@ -176,7 +176,8 @@ find_storage(const gchar * path)
     if (second_slash == NULL) {
         storage_len = strlen(path);
     } else {
-        storage_len = second_slash - path;
+        assert(second_slash > path);
+        storage_len = (gsize)(second_slash - path);
     }
 
     for (i = 0; i < MAX_STORAGE_AREA; ++i) {
