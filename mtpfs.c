@@ -468,6 +468,8 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
     GSList *item;
     int ret = 0;
 
+    assert(fi->fh <= INT_MAX);
+
     item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
     if (item != NULL) {
         //find parent id
@@ -501,7 +503,8 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
 
         struct stat st;
         uint64_t filesize;
-        fstat (fi->fh, &st);
+        fstat((int)fi->fh, &st);
+        assert(st.st_size >= 0);
         filesize = (uint64_t) st.st_size;
 
         // Setup file
@@ -515,9 +518,8 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
         genfile->parent_id = (uint32_t) parent_id;
         genfile->storage_id = storageArea[storageid].storage->id;
 
-        ret =
-            LIBMTP_Send_File_From_File_Descriptor (device, fi->fh,
-                genfile, NULL, NULL);
+        ret = LIBMTP_Send_File_From_File_Descriptor (device, (int)fi->fh,
+                                                     genfile, NULL, NULL);
         LIBMTP_destroy_file_t (genfile);
         DBG("Sent FILE %s",path);
         if (ret == 0) {
@@ -536,7 +538,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
         }
         myfiles = g_slist_remove (myfiles, item->data);
     }
-    close (fi->fh);
+    close((int)fi->fh);
     G_UNLOCK(device_lock);
     return ret;
 }
@@ -711,7 +713,8 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 
             if (item_id == file->item_id) {
                 stbuf->st_ino = item_id;
-                stbuf->st_size = file->filesize;
+                assert(file->filesize <= INT64_MAX);
+                stbuf->st_size = (int64_t) file->filesize;
                 stbuf->st_blocks = (file->filesize / 512) +
                     (file->filesize % 512 > 0 ? 1 : 0);
                 stbuf->st_nlink = 1;
@@ -743,7 +746,8 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
         while (file != NULL) {
             if (file->item_id == item_id) {
                 stbuf->st_ino = item_id;
-                stbuf->st_size = file->filesize;
+                assert(file->filesize <= INT64_MAX);
+                stbuf->st_size = (int64_t) file->filesize;
                 stbuf->st_blocks = (file->filesize / 512) +
                     (file->filesize % 512 > 0 ? 1 : 0);
                 stbuf->st_nlink = 1;
@@ -816,7 +820,7 @@ mtpfs_open (const gchar * path, struct fuse_file_info *fi)
                 LIBMTP_Get_File_To_File_Descriptor (device, item_id, tmpfile,
                                                     NULL, NULL);
             if (ret == 0) {
-                fi->fh = tmpfile;
+                fi->fh = (unsigned long long) tmpfile;
             } else {
                 return_unlock(-ENOENT);
             }
@@ -839,9 +843,14 @@ mtpfs_read (const gchar * path, gchar * buf, size_t size, off_t offset,
     if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
 
-    ret = pread (fi->fh, buf, size, offset);
-    if (ret == -1)
-        ret = -errno;
+    assert(fi->fh <= INT_MAX);
+    if ((int)fi->fh != -1) {
+        ret = pread ((int)fi->fh, buf, size, offset);
+        if (ret == -1)
+            ret = -errno;
+    } else {
+        ret = -ENOENT;
+    }
 
     return_unlock(ret);
 }
@@ -852,8 +861,9 @@ mtpfs_write (const gchar * path, const gchar * buf, size_t size, off_t offset,
 {
     enter_lock("write");
     int ret;
-    if (fi->fh != -1) {
-        ret = pwrite (fi->fh, buf, size, offset);
+    assert(fi->fh <= INT_MAX);
+    if (fi->fh != (uint64_t) -1) {
+        ret = pwrite ((int)fi->fh, buf, size, offset);
     } else {
         ret = -ENOENT;
     }
