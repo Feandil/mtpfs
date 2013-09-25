@@ -522,7 +522,6 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
         ret = LIBMTP_Send_File_From_File_Descriptor (device, (int)fi->fh,
                                                      genfile, NULL, NULL);
         LIBMTP_destroy_file_t (genfile);
-        DBG("Sent FILE %s",path);
         if (ret == 0) {
             DBG("Sent %s",path);
         } else {
@@ -1198,10 +1197,11 @@ main (int argc, char *argv[])
     LIBMTP_raw_device_t * rawdevices;
     int numrawdevices;
     LIBMTP_error_number_t err;
-    int i;
     int raw_device;
     int opt_seen;
     int opt;
+    int i;
+    char *friendlyname;
 
     /* Silently accept unknown opt */
     opterr = 0;
@@ -1237,8 +1237,6 @@ main (int argc, char *argv[])
         return 1;
     case LIBMTP_ERROR_NONE:
         {
-            int i;
-
             fprintf(stdout, "   Found %d device(s):\n", numrawdevices);
             for (i = 0; i < numrawdevices; i++) {
                 if (rawdevices[i].device_entry.vendor != NULL ||
@@ -1280,7 +1278,6 @@ main (int argc, char *argv[])
     LIBMTP_Dump_Errorstack(device);
     LIBMTP_Clear_Errorstack(device);
 
-    char *friendlyname;
     /* Echo the friendly name so we know which device we are working with */
     friendlyname = LIBMTP_Get_Friendlyname(device);
     if (friendlyname == NULL) {
