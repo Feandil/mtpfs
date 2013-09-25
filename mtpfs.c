@@ -1275,9 +1275,6 @@ main (int argc, char *argv[])
         return 1;
     }
 
-    LIBMTP_Dump_Errorstack(device);
-    LIBMTP_Clear_Errorstack(device);
-
     /* Echo the friendly name so we know which device we are working with */
     friendlyname = LIBMTP_Get_Friendlyname(device);
     if (friendlyname == NULL) {
