@@ -141,7 +141,7 @@ check_lost_files ()
     DBG("MTPFS checking for lost files exit found %d lost tracks", g_slist_length (lostfiles) );
 }
 
-void
+static void
 check_folders ()
 {
     int i;
@@ -551,7 +551,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
     return ret;
 }
 
-void
+static void
 mtpfs_destroy ()
 {
     DBG("mtpfs_destroy()");
