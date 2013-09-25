@@ -64,7 +64,7 @@ static StorageArea storageArea[MAX_STORAGE_AREA];
 static LIBMTP_file_t *files = NULL;
 static gboolean files_changed = TRUE;
 static GSList *lostfiles = NULL;
-static GSList *myfiles = NULL;
+static GHashTable *myfiles = NULL;
 
 G_LOCK_DEFINE_STATIC(device_lock);
 #define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
@@ -265,10 +265,6 @@ parse_path (const gchar * path)
     int i;
 
     DBG_F("parse_path(%s)", path);
-
-    // Check cached files first
-    if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL)
-        return 0;
 
     // Check lost+found
     if (strncmp("/lost+found", path, 11) == 0) {
@@ -472,14 +468,11 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
 {
     DBG("mtpfs_release(%s, %p)", path, fi);
     G_LOCK(device_lock);
-    // Check cached files first
-    GSList *item;
-    int ret = 0;
 
     assert(fi->fh <= INT_MAX);
 
-    item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
-    if (item != NULL) {
+    int ret = 0;
+    if (g_hash_table_contains(myfiles, path)) {
         //find parent id
         gchar *filename = g_strdup("");
         gchar **fields;
@@ -541,10 +534,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
         g_free (directory);
         // Refresh filelist
         files_changed = TRUE;
-        if (item->data) {
-            g_free (item->data);
-        }
-        myfiles = g_slist_remove (myfiles, item->data);
+        g_hash_table_remove(myfiles, path);
     }
     close((int)fi->fh);
     G_UNLOCK(device_lock);
@@ -699,14 +689,12 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
     }
 
     // Check cached files first (stuff that hasn't been written to dev yet)
-    if (myfiles != NULL) {
-        if (g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp) != NULL) {
-            stbuf->st_mode = S_IFREG | 0777;
-            stbuf->st_size = 0;
-            stbuf->st_blocks = 2;
-            stbuf->st_mtime = time(NULL);
-            return_unlock(0);
-        }
+    if (g_hash_table_contains(myfiles, path)) {
+        stbuf->st_mode = S_IFREG | 0777;
+        stbuf->st_size = 0;
+        stbuf->st_blocks = 2;
+        stbuf->st_mtime = time(NULL);
+        return_unlock(0);
     }
 
     // Special case directory 'Playlists', 'lost+found'
@@ -801,10 +789,12 @@ mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
     DBG("mtpfs_mknod(%s, %u, %llu)", path, mode, dev);
     G_LOCK(device_lock);
 
+    if (g_hash_table_contains(myfiles, path))
+        return_unlock(-EEXIST);
     uint32_t item_id = parse_path (path);
     if (item_id != 0xFFFFFFFF)
         return_unlock(-EEXIST);
-    myfiles = g_slist_append (myfiles, (gpointer) (g_strdup (path)));
+    g_hash_table_insert(myfiles, g_strdup(path), NULL);
     DBG("NEW FILE");
     return_unlock(0);
 }
@@ -812,12 +802,22 @@ mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
 static int
 mtpfs_open (const gchar * path, struct fuse_file_info *fi)
 {
+    uint32_t item_id;
+
     DBG("mtpfs_open(%s, %p)", path, fi);
     G_LOCK(device_lock);
 
-    uint32_t item_id = parse_path (path);
-    if (item_id == 0xFFFFFFFF)
+    item_id = parse_path (path);
+    if ((item_id == 0xFFFFFFFF) && (!(g_hash_table_contains(myfiles, path)))) {
         return_unlock(-ENOENT);
+    }
+    if (item_id == 0) {
+        DBG("Trying to open root");
+        return_unlock(-EPERM);
+    }
+    if (g_hash_table_lookup(myfiles, path) != NULL) {
+        return_unlock(-EBUSY);
+    }
 
     if (fi->flags == O_RDONLY) {
         DBG("read");
@@ -827,12 +827,11 @@ mtpfs_open (const gchar * path, struct fuse_file_info *fi)
         DBG("rdwrite");
     }
 
-    int storageid;
-    storageid = find_storage(path);
     FILE *filetmp = tmpfile ();
     int tmpfile_fd = fileno (filetmp);
     if (tmpfile_fd != -1) {
-        if (item_id == 0) {
+        if (item_id == 0xFFFFFFFF) {
+            g_hash_table_replace(myfiles, g_strdup(path), (void*)1);
             fi->fh = (unsigned long long) tmpfile_fd;
         } else {
             int ret = LIBMTP_Get_File_To_File_Descriptor (device, item_id, tmpfile_fd, NULL, NULL);
@@ -920,11 +919,9 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
       return_unlock(-EPERM);
 
     int ret = 0;
-    GSList *item;
-    item = g_slist_find_custom (myfiles, path, (GCompareFunc) strcmp);
     uint32_t item_id = parse_path (path);
     int storageid = find_storage(path);
-    if ((item == NULL) && (item_id == 0xFFFFFFFF)) {
+    if ((item_id == 0xFFFFFFFF) && !g_hash_table_contains(myfiles, path)) {
         // Split path and find parent_id
         gchar *filename = g_strdup("");
         gchar **fields;
@@ -1307,6 +1304,8 @@ main (int argc, char *argv[])
         DBG("Storage%d: %d - %s\n",i, storage->id, storage->StorageDescription);
         i++;
     }
+
+    myfiles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
     DBG("Start fuse");
     return fuse_main(argc, argv, &mtpfs_oper, NULL); //TODO: use privdata instead of static vars
