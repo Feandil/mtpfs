@@ -1185,7 +1185,6 @@ static struct fuse_operations mtpfs_oper = {
 int
 main (int argc, char *argv[])
 {
-    umask (0);
     LIBMTP_raw_device_t * rawdevices;
     int numrawdevices;
     LIBMTP_error_number_t err;
