@@ -32,6 +32,17 @@ else
    AC_DEFINE(DEBUG,0,[Define if debug logging is enabled])
 fi
 
+AC_ARG_ENABLE(debugfunctions,
+              AC_HELP_STRING([--enable-debugfunctions],
+                             [enable debugging internal functions features]),
+              , enable_debugfunctions=no)
+if test "x$enable_debugfunctions" != xyes -a "x$enable_debugfunctions" != xno; then
+   AC_MSG_ERROR(You may not pass an argument to --enable-debug-functions: $enable_debug_funs $enable_debugfunctions)
+fi
+
+if test "x$enable_debug_funs" = xyes; then
+   AC_DEFINE(DEBUG_FUNC,1,[Define if debug logging is enabled])
+fi
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
