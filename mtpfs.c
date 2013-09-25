@@ -941,8 +941,11 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
                     gchar *tmp = g_strndup (directory, strlen (directory) - 1);
                     parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
                     g_free (tmp);
-                    if (parent_id == 0xFFFFFFFF)
-                        parent_id = 0;
+                    if (parent_id == 0xFFFFFFFF) {
+                        DBG("parent not found");
+                        ret = -ENOENT;
+                        goto clean;
+                    }
                     g_free (filename);
                     filename = g_strdup (fields[i]);
                 } else {
@@ -953,15 +956,16 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
         }
         DBG("%s:%s:%d", filename, directory, parent_id);
         item_id = LIBMTP_Create_Folder (device, filename, parent_id, storageArea[storageid].storage->id);
-        g_strfreev (fields);
-        g_free (directory);
-        g_free (filename);
         if (item_id == 0) {
             ret = -EEXIST;
         } else {
             storageArea[storageid].folders_changed=TRUE;
             ret = 0;
         }
+clean:
+        g_strfreev (fields);
+        g_free (directory);
+        g_free (filename);
     } else {
         ret = -EEXIST;
     }
