@@ -59,7 +59,6 @@ typedef struct
 } StorageArea;
 
 /* Static variables */
-
 static LIBMTP_mtpdevice_t *device;
 static StorageArea storageArea[MAX_STORAGE_AREA];
 static LIBMTP_file_t *files = NULL;
@@ -69,7 +68,6 @@ static GSList *myfiles = NULL;
 
 G_LOCK_DEFINE_STATIC(device_lock);
 #define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
-
 
 /* Freeing tree representation */
 static void
@@ -686,7 +684,7 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 
     DBG_F("mtpfs_getattr_real(%s, %p)", path, stbuf);
 
-    if (path==NULL) return_unlock(-ENOENT);
+    if (path == NULL) return_unlock(-ENOENT);
     memset (stbuf, 0, sizeof (struct stat));
 
     // Set uid/gid of file
@@ -830,18 +828,16 @@ mtpfs_open (const gchar * path, struct fuse_file_info *fi)
     }
 
     int storageid;
-    storageid=find_storage(path);
+    storageid = find_storage(path);
     FILE *filetmp = tmpfile ();
-    int tmpfile = fileno (filetmp);
-    if (tmpfile != -1) {
+    int tmpfile_fd = fileno (filetmp);
+    if (tmpfile_fd != -1) {
         if (item_id == 0) {
-            fi->fh = tmpfile;
+            fi->fh = (unsigned long long) tmpfile_fd;
         } else {
-            int ret =
-                LIBMTP_Get_File_To_File_Descriptor (device, item_id, tmpfile,
-                                                    NULL, NULL);
+            int ret = LIBMTP_Get_File_To_File_Descriptor (device, item_id, tmpfile_fd, NULL, NULL);
             if (ret == 0) {
-                fi->fh = (unsigned long long) tmpfile;
+                fi->fh = (unsigned long long)tmpfile_fd;
             } else {
                 return_unlock(-ENOENT);
             }
@@ -900,7 +896,7 @@ mtpfs_write (const gchar * path, const gchar * buf, size_t size, off_t offset,
 static int
 mtpfs_unlink (const gchar * path)
 {
-    int ret = 0;
+    int ret;
 
     DBG("mtpfs_unlink(%s)", path);
     G_LOCK(device_lock);
@@ -910,7 +906,7 @@ mtpfs_unlink (const gchar * path)
         return_unlock(-ENOENT);
     ret = LIBMTP_Delete_Object (device, item_id);
     if (ret != 0) {
-      LIBMTP_Dump_Errorstack (device);
+        LIBMTP_Dump_Errorstack (device);
     } else {
         files_changed = TRUE;
     }
@@ -960,11 +956,11 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
             }
         }
         DBG("%s:%s:%d", filename, directory, parent_id);
-        ret = LIBMTP_Create_Folder (device, filename, parent_id, storageArea[storageid].storage->id);
+        item_id = LIBMTP_Create_Folder (device, filename, parent_id, storageArea[storageid].storage->id);
         g_strfreev (fields);
         g_free (directory);
         g_free (filename);
-        if (ret == 0) {
+        if (item_id == 0) {
             ret = -EEXIST;
         } else {
             storageArea[storageid].folders_changed=TRUE;
@@ -975,7 +971,6 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
     }
     return ret;
 }
-
 
 static int
 mtpfs_mkdir (const char *path, mode_t mode)
