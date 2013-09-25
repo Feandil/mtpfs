@@ -939,7 +939,6 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
             if (strlen (fields[i]) > 0) {
                 if (fields[i + 1] == NULL) {
                     gchar *tmp = g_strndup (directory, strlen (directory) - 1);
-                    check_folders();
                     parent_id = lookup_folder_id (storageArea[storageid].folders, tmp);
                     g_free (tmp);
                     if (parent_id == 0xFFFFFFFF)
