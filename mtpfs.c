@@ -857,9 +857,6 @@ mtpfs_read (const gchar * path, gchar * buf, size_t size, off_t offset,
 
     DBG("mtpfs_read(%s, %p, %zu, %llu, %p)", path, buf, size, offset, fi);
     G_LOCK(device_lock);
-    uint32_t item_id = parse_path (path);
-    if (item_id == 0xFFFFFFFF)
-        return_unlock(-ENOENT);
 
     assert(fi->fh <= INT_MAX);
     if ((int)fi->fh != -1) {
