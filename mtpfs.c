@@ -1182,6 +1182,11 @@ static struct fuse_operations mtpfs_oper = {
     .init    = mtpfs_init,
 };
 
+static const struct option long_options[] = {
+  {"device",       required_argument, 0,  'z' },
+  {NULL,                           0, 0,  0 }
+};
+
 int
 main (int argc, char *argv[])
 {
@@ -1189,21 +1194,27 @@ main (int argc, char *argv[])
     int numrawdevices;
     LIBMTP_error_number_t err;
     int i;
-
+    int raw_device;
+    int opt_seen;
     int opt;
-    extern int optind;
-    extern char *optarg;
 
-    //while ((opt = getopt(argc, argv, "d")) != -1 ) {
-        //switch (opt) {
-        //case 'd':
-            ////LIBMTP_Set_Debug(9);
-            //break;
-        //}
-    //}
+    /* Silently accept unknown opt */
+    opterr = 0;
+    raw_device = 0;
+    opt_seen = 0;
+    while ((opt = getopt_long(argc, argv, "z:", long_options, NULL)) != -1 ) {
+        switch (opt) {
+        case 'z':
+            raw_device = atoi(optarg);
+            opt_seen += 2;
+            break;
+        default:
+            break;
+        }
+    }
 
-    //argc -= optind;
-    //argv += optind;
+    argc -= opt_seen;
+    argv += opt_seen;
 
     LIBMTP_Init ();
 
@@ -1250,10 +1261,14 @@ main (int argc, char *argv[])
         return 1;
     }
 
-    fprintf(stdout, "Attempting to connect device\n");
-    device = LIBMTP_Open_Raw_Device(&rawdevices[i]);
+    fprintf(stdout, "Attempting to connect device %d\n", raw_device);
+    if (raw_device >= numrawdevices) {
+        fprintf(stderr, "Device %d does not exist\n", raw_device);
+        return 1;
+    }
+    device = LIBMTP_Open_Raw_Device(&rawdevices[raw_device]);
     if (device == NULL) {
-        fprintf(stderr, "Unable to open raw device %d\n", i);
+        fprintf(stderr, "Unable to open raw device %d\n", raw_device);
         return 1;
     }
 
