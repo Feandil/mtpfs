@@ -4,7 +4,7 @@ MTPFS
 MTPFS is a FUSE filesystem based on libmtp that allows a mtp device
 to be browsed as if it were a normal external harddisk
 
-Requirements
+Requirements (approximately)
 ------------
 
 FUSE >= 2.2
@@ -32,8 +32,8 @@ To enable debugging info use the --enable-debug option when running ./configure
 Acknowledgements
 ----------------
 This wouldn't be possible without libmtp, libusb and fuse.
-Sections of code (in id3read.c and mp3file.c) blatently ripped from gnomad
 
 Contact info
 ------------
+Vincent Brillault <git@lerya.net>
 Chris Debenham <chris@adebenham.com>
