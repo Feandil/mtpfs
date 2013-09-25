@@ -68,7 +68,6 @@ static GSList *lostfiles = NULL;
 static GSList *myfiles = NULL;
 
 G_LOCK_DEFINE_STATIC(device_lock);
-#define enter_lock(a...)       do { G_LOCK(device_lock); } while(0)
 #define return_unlock(a)       do { G_UNLOCK(device_lock); return a; } while(0)
 
 
@@ -473,8 +472,8 @@ find_filetype (const gchar * filename)
 static int
 mtpfs_release (const char *path, struct fuse_file_info *fi)
 {
-    enter_lock("release: %s", path);
     DBG("mtpfs_release(%s, %p)", path, fi);
+    G_LOCK(device_lock);
     // Check cached files first
     GSList *item;
     int ret = 0;
@@ -558,7 +557,8 @@ void
 mtpfs_destroy ()
 {
     DBG("mtpfs_destroy()");
-    enter_lock("destroy");
+    G_LOCK(device_lock);
+
     if (files) free_files(files);
     int i;
     for (i = 0; i < MAX_STORAGE_AREA; ++i) {
@@ -572,10 +572,10 @@ static int
 mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
                off_t offset, struct fuse_file_info *fi)
 {
-    enter_lock("readdir %s", path);
     LIBMTP_folder_t *folder;
 
     DBG("mtpfs_readdir(%s, %p, %p, %lli, %p)", path, buf, filler, offset, fi);
+    G_LOCK(device_lock);
 
     // Add common entries
     filler (buf, ".", NULL, 0);
@@ -789,7 +789,7 @@ static int
 mtpfs_getattr (const gchar * path, struct stat *stbuf)
 {
     DBG("mtpfs_getattr(%s, %p)", path, stbuf);
-    enter_lock("getattr %s", path);
+    G_LOCK(device_lock);
 
     int ret = mtpfs_getattr_real (path, stbuf);
 
@@ -801,7 +801,7 @@ static int
 mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
 {
     DBG("mtpfs_mknod(%s, %u, %llu)", path, mode, dev);
-    enter_lock("mknod %s", path);
+    G_LOCK(device_lock);
 
     uint32_t item_id = parse_path (path);
     if (item_id != 0xFFFFFFFF)
@@ -815,7 +815,8 @@ static int
 mtpfs_open (const gchar * path, struct fuse_file_info *fi)
 {
     DBG("mtpfs_open(%s, %p)", path, fi);
-    enter_lock("open");
+    G_LOCK(device_lock);
+
     uint32_t item_id = parse_path (path);
     if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
@@ -856,10 +857,10 @@ static int
 mtpfs_read (const gchar * path, gchar * buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
-    enter_lock("read");
     int ret;
 
     DBG("mtpfs_read(%s, %p, %zu, %llu, %p)", path, buf, size, offset, fi);
+    G_LOCK(device_lock);
     uint32_t item_id = parse_path (path);
     if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
@@ -880,10 +881,10 @@ static int
 mtpfs_write (const gchar * path, const gchar * buf, size_t size, off_t offset,
              struct fuse_file_info *fi)
 {
-    enter_lock("write");
     int ret;
 
     DBG("mtpfs_write(%s, %p, %zu, %llu, %p)", path, buf, size, offset, fi);
+    G_LOCK(device_lock);
 
     assert(fi->fh <= INT_MAX);
     if (fi->fh != (uint64_t) -1) {
@@ -899,10 +900,10 @@ mtpfs_write (const gchar * path, const gchar * buf, size_t size, off_t offset,
 static int
 mtpfs_unlink (const gchar * path)
 {
-    enter_lock("unlink");
     int ret = 0;
 
     DBG("mtpfs_unlink(%s)", path);
+    G_LOCK(device_lock);
 
     uint32_t item_id = parse_path (path);
     if (item_id == 0 || item_id == 0xFFFFFFFF)
@@ -979,8 +980,8 @@ mtpfs_mkdir_real (const char *path, mode_t mode)
 static int
 mtpfs_mkdir (const char *path, mode_t mode)
 {
-    enter_lock("mkdir: %s", path);
     DBG("mtpfs_mkdir(%s, %u)", path, mode);
+    G_LOCK(device_lock);
 
     int ret = mtpfs_mkdir_real (path, mode);
 
@@ -990,8 +991,8 @@ mtpfs_mkdir (const char *path, mode_t mode)
 static int
 mtpfs_rmdir (const char *path)
 {
-    enter_lock("rmdir %s", path);
     DBG("mtpfs_rmdir(%s)", path);
+    G_LOCK(device_lock);
 
     int ret = 0;
     uint32_t folder_id = 0xFFFFFFFF;
@@ -1052,8 +1053,8 @@ mtpfs_rename (const char *oldname, const char *newname)
 static int
 mtpfs_rename (const char *oldname, const char *newname)
 {
-     enter_lock("rename '%s' to '%s'", oldname, newname);
     DBG("mtpfs_unlink(%s, %s)", oldname, newname);
+    G_LOCK(device_lock);
 
     uint32_t folder_id = 0xFFFFFFFF;
     int folder_empty = 1;
