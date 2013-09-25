@@ -711,6 +711,10 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
     if (strncasecmp (path, "/lost+found",11) == 0) {
         GSList *item;
         uint32_t item_id = parse_path (path);
+        if (item_id == 0xFFFFFFFF) {
+            DBG("mtpfs_getattr_real: not found (%s)", path);
+            return_unlock(-ENOENT);
+        }
         for (item = lostfiles; item != NULL; item = g_slist_next (item)) {
             LIBMTP_file_t *file = (LIBMTP_file_t *) item->data;
 
@@ -741,9 +745,13 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
     } else {
         // Must be a file
         item_id = parse_path (path);
-        LIBMTP_file_t *file;
         DBG("id:path=%d:%s", item_id, path);
+        if (item_id == 0xFFFFFFFF) {
+            DBG("mtpfs_getattr_real: not found (%s)", path);
+            return_unlock(-ENOENT);
+        }
         check_files();
+        LIBMTP_file_t *file;
         file = files;
         gboolean found = FALSE;
         while (file != NULL) {
