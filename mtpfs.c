@@ -76,6 +76,8 @@ G_LOCK_DEFINE_STATIC(device_lock);
 static void
 free_files(LIBMTP_file_t *filelist)
 {
+    DBG_F("Free_files(%p)", filelist);
+
     LIBMTP_file_t *file = filelist, *tmp;
     while (file) {
         tmp = file;
@@ -88,6 +90,8 @@ free_files(LIBMTP_file_t *filelist)
 static void
 check_files ()
 {
+    DBG_F("check_files()");
+
     if (files_changed) {
         DBG("Refreshing Filelist");
         if (files) free_files(files);
@@ -104,6 +108,8 @@ check_lost_files ()
     uint32_t last_parent_id = 0xFFFFFFFF;
     gboolean last_parent_found = FALSE;
     LIBMTP_file_t *item;
+
+    DBG_F("check_lost_files()");
 
     if (lostfiles != NULL)
         g_slist_free (lostfiles);
@@ -142,6 +148,9 @@ void
 check_folders ()
 {
     int i;
+
+    DBG_F("check_folders()");
+
     for (i = 0; i < MAX_STORAGE_AREA; ++i) {
         if (storageArea[i].folders_changed) {
             DBG("Refreshing Folderlist %d-%s", i,storageArea[i].storage->StorageDescription);
@@ -162,7 +171,8 @@ find_storage(const gchar * path)
     int i;
     gsize storage_len;
     gchar * second_slash;
-    //DBG("find_storage:%s", path);
+
+    DBG_F("find_storage(%s)", path);
 
     // Skip initial '/'
     if (*path != '/') {
@@ -464,6 +474,7 @@ static int
 mtpfs_release (const char *path, struct fuse_file_info *fi)
 {
     enter_lock("release: %s", path);
+    DBG("mtpfs_release(%s, %p)", path, fi);
     // Check cached files first
     GSList *item;
     int ret = 0;
@@ -546,6 +557,7 @@ mtpfs_release (const char *path, struct fuse_file_info *fi)
 void
 mtpfs_destroy ()
 {
+    DBG("mtpfs_destroy()");
     enter_lock("destroy");
     if (files) free_files(files);
     int i;
@@ -562,6 +574,8 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
 {
     enter_lock("readdir %s", path);
     LIBMTP_folder_t *folder;
+
+    DBG("mtpfs_readdir(%s, %p, %p, %lli, %p)", path, buf, filler, offset, fi);
 
     // Add common entries
     filler (buf, ".", NULL, 0);
@@ -612,7 +626,7 @@ mtpfs_readdir (const gchar * path, void *buf, fuse_fill_dir_t filler,
         folder_id = lookup_folder_id (storageArea[storageid].folders, path);
     }
 
-    DBG("Checking folders for %d",storageid);
+    DBG("Checking folders for %d on %d", folder_id, storageid);
     check_folders();
     if (folder_id == 0) {
         DBG("Root of storage area");
@@ -669,6 +683,9 @@ static int
 mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 {
     int ret = 0;
+
+    DBG_F("mtpfs_getattr_real(%s, %p)", path, stbuf);
+
     if (path==NULL) return_unlock(-ENOENT);
     memset (stbuf, 0, sizeof (struct stat));
 
@@ -771,6 +788,7 @@ mtpfs_getattr_real (const gchar * path, struct stat *stbuf)
 static int
 mtpfs_getattr (const gchar * path, struct stat *stbuf)
 {
+    DBG("mtpfs_getattr(%s, %p)", path, stbuf);
     enter_lock("getattr %s", path);
 
     int ret = mtpfs_getattr_real (path, stbuf);
@@ -782,6 +800,7 @@ mtpfs_getattr (const gchar * path, struct stat *stbuf)
 static int
 mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
 {
+    DBG("mtpfs_mknod(%s, %u, %llu)", path, mode, dev);
     enter_lock("mknod %s", path);
 
     uint32_t item_id = parse_path (path);
@@ -795,6 +814,7 @@ mtpfs_mknod (const gchar * path, mode_t mode, dev_t dev)
 static int
 mtpfs_open (const gchar * path, struct fuse_file_info *fi)
 {
+    DBG("mtpfs_open(%s, %p)", path, fi);
     enter_lock("open");
     uint32_t item_id = parse_path (path);
     if (item_id == 0xFFFFFFFF)
@@ -839,6 +859,7 @@ mtpfs_read (const gchar * path, gchar * buf, size_t size, off_t offset,
     enter_lock("read");
     int ret;
 
+    DBG("mtpfs_read(%s, %p, %zu, %llu, %p)", path, buf, size, offset, fi);
     uint32_t item_id = parse_path (path);
     if (item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
@@ -861,6 +882,9 @@ mtpfs_write (const gchar * path, const gchar * buf, size_t size, off_t offset,
 {
     enter_lock("write");
     int ret;
+
+    DBG("mtpfs_write(%s, %p, %zu, %llu, %p)", path, buf, size, offset, fi);
+
     assert(fi->fh <= INT_MAX);
     if (fi->fh != (uint64_t) -1) {
         ret = pwrite ((int)fi->fh, buf, size, offset);
@@ -877,6 +901,9 @@ mtpfs_unlink (const gchar * path)
 {
     enter_lock("unlink");
     int ret = 0;
+
+    DBG("mtpfs_unlink(%s)", path);
+
     uint32_t item_id = parse_path (path);
     if (item_id == 0 || item_id == 0xFFFFFFFF)
         return_unlock(-ENOENT);
@@ -893,6 +920,8 @@ mtpfs_unlink (const gchar * path)
 static int
 mtpfs_mkdir_real (const char *path, mode_t mode)
 {
+    DBG_F("mtpfs_mkdir_real(%s, %u)", path, mode);
+
     if (g_str_has_prefix (path, "/.Trash") == TRUE)
       return_unlock(-EPERM);
 
@@ -951,6 +980,8 @@ static int
 mtpfs_mkdir (const char *path, mode_t mode)
 {
     enter_lock("mkdir: %s", path);
+    DBG("mtpfs_mkdir(%s, %u)", path, mode);
+
     int ret = mtpfs_mkdir_real (path, mode);
 
     return_unlock(ret);
@@ -960,6 +991,8 @@ static int
 mtpfs_rmdir (const char *path)
 {
     enter_lock("rmdir %s", path);
+    DBG("mtpfs_rmdir(%s)", path);
+
     int ret = 0;
     uint32_t folder_id = 0xFFFFFFFF;
     if (strcmp (path, "/") == 0) {
@@ -1020,6 +1053,7 @@ static int
 mtpfs_rename (const char *oldname, const char *newname)
 {
      enter_lock("rename '%s' to '%s'", oldname, newname);
+    DBG("mtpfs_unlink(%s, %s)", oldname, newname);
 
     uint32_t folder_id = 0xFFFFFFFF;
     int folder_empty = 1;
@@ -1093,8 +1127,7 @@ mtpfs_statvfs (const char *path, struct statvfs *stbuf)
 {
     int storage_id = -1;
 
-    DBG("mtpfs_statvfs(%s)", path);
-
+    DBG("mtpfs_statvfs(%s, %p)", path, stbuf);
 
     stbuf->f_bsize = 1024;
 
