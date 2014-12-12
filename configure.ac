@@ -12,7 +12,7 @@ PKG_CHECK_MODULES(MTP, libmtp >= 1.1.0)
 AC_SUBST(MTP_CFLAGS)
 AC_SUBST(MTP_LIBS)
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.6 \
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.32 \
                         gthread-2.0 >= 1.2 \
                         gio-2.0 >= 2.6)
 AC_SUBST(GLIB_CFLAGS)
